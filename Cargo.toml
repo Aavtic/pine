@@ -1,0 +1,10 @@
+[workspace]
+members = [
+    "crates/lexer",
+    "crates/parser",
+    "crates/ast",
+    "crates/ir",
+    "crates/codegen",
+    "tools/alpherac",
+]
+
