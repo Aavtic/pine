@@ -6,4 +6,5 @@ edition = "2024"
 [dependencies]
 clap = { version = "4.5.51", features = ["derive", "env"] }
 lexer = { path = "../../crates/lexer" }
+parser = { path = "../../crates/parser" }
 utils = { path = "../../crates/utils" }
