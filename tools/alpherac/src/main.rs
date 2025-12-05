@@ -1,12 +1,14 @@
-use clap::{Parser, Subcommand};
+use clap::Subcommand;
+use clap::Parser as ClapParser;
 use std::path::PathBuf;
 
-use lexer::lexer;
 use utils::read_from_file;
+use lexer::lexer::{lex, Token};
+use parser::parser::Parser;
 
 
 /// Alphera Compiler
-#[derive(Parser, Debug)]
+#[derive(ClapParser, Debug)]
 #[clap(version)]
 struct Args {
     //#[clap(short = 'p', long, env)]
@@ -33,10 +35,18 @@ fn main() {
 
     match args.cmd {
         Commands::Build{source_file} => {
-            let source = handle_reading_file(source_file);
-            handle_lexer(source);
+            compile_program(source_file)
         }
     }
+}
+
+fn compile_program(file: PathBuf) {
+    let source = handle_reading_file(file);
+    let tokens = lex(source.as_str());
+    print_tokens(tokens.clone());
+    let mut parser = Parser::new(tokens);
+    let ast = parser.parse();
+    println!("{:?}", ast);
 }
 
 fn handle_reading_file(source: PathBuf) -> String {
@@ -48,8 +58,7 @@ fn handle_reading_file(source: PathBuf) -> String {
     }
 }
 
-fn handle_lexer(source: String) {
-    let tokens = lexer::lexer::lex(source.as_str());
+fn print_tokens(tokens: Vec<Token>) {
     for token in tokens {
         println!("{}: {:?}", token.lexeme, token.token_type);
     }
