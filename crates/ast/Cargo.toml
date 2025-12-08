@@ -5,3 +5,4 @@ edition = "2024"
 
 [dependencies]
 lexer = { path = "../../crates/lexer" }
+utils = { path = "../../crates/utils" }
