@@ -4,14 +4,13 @@ use std::process;
 #[derive(Debug, Clone)]
 pub struct Token {
     pub token_type: TokenType,
-    pub lexeme:     String,
-    pub object:     Option<Object>,
-    pub line:       usize,
-    pub column:     usize,
+    pub lexeme: String,
+    pub object: Option<Object>,
+    pub line: usize,
+    pub column: usize,
 }
 
-#[derive(Debug, Clone)]
-#[derive(PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TokenType {
     // Single Character tokens
     OpenPara,
@@ -23,16 +22,27 @@ pub enum TokenType {
     Minus,
     Star,
     Slash,
+    Mod,
     SemiColon,
+    Colon,
     Dot,
 
     // One or Two character tokens
-    Bang, BangEqual,
-    Equal, EqualEqual,
-    Greater, GreaterEqual,
-    Lesser, LesserEqual,
+    Bang,
+    BangEqual,
+    Equal,
+    EqualEqual,
+    Greater,
+    GreaterEqual,
+    Lesser,
+    LesserEqual,
 
-    Or, And, BitwiseOr, BitwiseAnd,
+    RightArrow, // ->
+
+    Or,
+    And,
+    BitwiseOr,
+    BitwiseAnd,
 
     // Literals
     Identifier,
@@ -50,6 +60,7 @@ pub enum TokenType {
     If,
     While,
     Return,
+    PrintStmt,
 
     EOF, // Marks the end of token stream
 }
@@ -63,19 +74,23 @@ pub enum Object {
 #[derive(Debug)]
 enum LexError {
     SyntaxError(String, usize, usize),
-    UnterminatedString(usize, usize)
+    UnterminatedString(usize, usize),
 }
 impl fmt::Display for LexError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             // TODO:
             // Add filename for better error messages
-            LexError::SyntaxError(error, line, col) => write!(f, "SyntaxError: {}\nAt {}:{}", error, line, col),
-            LexError::UnterminatedString(line, col) => write!(f, "Unterminated String at {}:{}", line, col),
+            LexError::SyntaxError(error, line, col) => {
+                write!(f, "SyntaxError: {}\nAt {}:{}", error, line, col)
+            }
+            LexError::UnterminatedString(line, col) => {
+                write!(f, "Unterminated String at {}:{}", line, col)
+            }
         }
     }
 }
-impl std::error::Error for LexError{}
+impl std::error::Error for LexError {}
 
 struct Tokenizer {
     // marks the current line
@@ -96,7 +111,7 @@ impl Tokenizer {
     fn new(source: &str) -> Tokenizer {
         Tokenizer {
             line: 1,
-            col: 0,
+            col: 1,
             current: 0,
             start: 0,
             tokens: Vec::new(),
@@ -125,7 +140,7 @@ impl Tokenizer {
 
     fn peek(&self) -> char {
         if self.is_end() {
-            return '\0'
+            return '\0';
         }
         // TODO: Handle better
         return self.source.chars().nth(self.current).unwrap();
@@ -145,15 +160,25 @@ impl Tokenizer {
     fn trim_string(&self) -> String {
         // TODO:
         // Handle this better
-        self.source.get(self.start+1..self.current-1).unwrap().to_string()
+        self.source
+            .get(self.start + 1..self.current - 1)
+            .unwrap()
+            .to_string()
     }
 
     fn get_current_token(&self) -> String {
-        self.source.get(self.start..self.current).unwrap().to_string()
-    } 
+        self.source
+            .get(self.start..self.current)
+            .unwrap()
+            .to_string()
+    }
 
     fn get_number(&self) -> usize {
-        self.source.get(self.start..self.current).unwrap().parse::<usize>().unwrap()
+        self.source
+            .get(self.start..self.current)
+            .unwrap()
+            .parse::<usize>()
+            .unwrap()
     }
 
     fn add_token_string(&mut self) {
@@ -194,12 +219,14 @@ impl Tokenizer {
             // Keywords
             "fn" => self.add_token(TokenType::Fn, None),
             "include" => self.add_token(TokenType::Include, None),
-            "True"    => self.add_token(TokenType::True, None),
-            "False"   => self.add_token(TokenType::False, None),
-            "let"     => self.add_token(TokenType::Let, None),
-            "for"     => self.add_token(TokenType::For, None),
-            "while"     => self.add_token(TokenType::While, None),
-            "return"     => self.add_token(TokenType::Return, None),
+            "true" => self.add_token(TokenType::True, None),
+            "false" => self.add_token(TokenType::False, None),
+            "let" => self.add_token(TokenType::Let, None),
+            "for" => self.add_token(TokenType::For, None),
+            "while" => self.add_token(TokenType::While, None),
+            "return" => self.add_token(TokenType::Return, None),
+            "print" => self.add_token(TokenType::PrintStmt, None),
+            "None" =>  self.add_token(TokenType::None, None),
 
             // Identifiers
             _ => self.add_token(TokenType::Identifier, None),
@@ -219,17 +246,28 @@ impl Tokenizer {
             '}' => self.add_token(TokenType::CloseCurly, None),
             ',' => self.add_token(TokenType::Comma, None),
             '+' => self.add_token(TokenType::Plus, None),
-            '-' => self.add_token(TokenType::Minus, None),
+            '-' => {
+                if self.check_current('>') {
+                    self.add_token(TokenType::RightArrow, None);
+                } else {
+                    self.add_token(TokenType::Minus, None)
+                }
+            },
             '*' => self.add_token(TokenType::Star, None),
             '/' => self.add_token(TokenType::Slash, None),
+            '%' => self.add_token(TokenType::Mod, None),
             ';' => self.add_token(TokenType::SemiColon, None),
+            ':' => self.add_token(TokenType::Colon, None),
             '.' => self.add_token(TokenType::Dot, None),
 
-            ' ' => { self.col += 1 }
+            ' ' => self.col += 1,
             '\r' => {}
-            '\t' => { self.col += 4 }
+            '\t' => self.col += 4,
 
-            '\n' => { self.line += 1; self.col = 0 }
+            '\n' => {
+                self.line += 1;
+                self.col = 0
+            }
 
             '!' => {
                 if self.check_current('=') {
@@ -237,7 +275,7 @@ impl Tokenizer {
                 } else {
                     self.add_token(TokenType::Bang, None)
                 }
-            },
+            }
 
             '>' => {
                 if self.check_current('=') {
@@ -286,7 +324,11 @@ impl Tokenizer {
                 } else if c.is_alphabetic() {
                     self.add_token_identifier();
                 } else {
-                    self.raise_error(LexError::SyntaxError(format!("Unexpected Character {}", c), self.line, self.col));
+                    self.raise_error(LexError::SyntaxError(
+                        format!("Unexpected Character {}", c),
+                        self.line,
+                        self.col,
+                    ));
                 }
             }
         }
@@ -295,19 +337,21 @@ impl Tokenizer {
     fn add_token(&mut self, token_type: TokenType, object: Option<Object>) {
         // TODO:
         // Handle this better
-        let lexeme = self.source.get(self.start..self.current).unwrap().to_string();
+        let lexeme = self
+            .source
+            .get(self.start..self.current)
+            .unwrap()
+            .to_string();
         let length = lexeme.len();
         let line = self.line;
         let column = self.col;
-        self.tokens.push(
-            Token{
-                token_type,
-                lexeme,
-                object,
-                line,
-                column,
-            }
-        );
+        self.tokens.push(Token {
+            token_type,
+            lexeme,
+            object,
+            line,
+            column,
+        });
 
         self.col = self.col + length;
     }

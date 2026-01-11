@@ -1,6 +1,8 @@
-include std;
+fn max(num1: i32, num2: i32) -> i32 {
+    return num1 + num2
+}
 
-fn main() {
-    expr = a >= b || c <= d && e >= f || g <= h;
-    std.println("Hello World!");
+fn main() -> i32 {
+    func1()
+    return 54
 }

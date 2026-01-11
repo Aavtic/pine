@@ -4,3 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+ast = { path = "../../crates/ast" }
+analyzer = { path = "../../crates/analyzer" }
+
+inkwell = { version = "0.7.0", features = ["llvm21-1"] }
+

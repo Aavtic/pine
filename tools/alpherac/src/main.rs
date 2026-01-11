@@ -1,12 +1,13 @@
 use clap::Parser as ClapParser;
 use std::path::PathBuf;
 
-use clap::{Subcommand, Args};
+use clap::{Args, Subcommand};
 
-use utils::read_from_file;
-use lexer::lexer::{lex, Token};
+use codegen::codegen::CodeGen;
+use lexer::lexer::{Token, lex};
+use linker::linker;
 use parser::parser::Parser;
-
+use utils::read_from_file;
 
 /// Alphera Compiler
 #[derive(ClapParser, Debug)]
@@ -36,12 +37,15 @@ struct BuildArgs {
 #[derive(Subcommand, Debug)]
 enum BuildMode {
     /// Build the AST and write it as a DOT graph
-    Ast {
-        /// Output DOT file
-        output: PathBuf,
-    },
+    // Feature needs to be build
+    //Ast {
+    //    /// Output DOT file
+    //    //output: PathBuf,
+    //},
+    Ast,
+    Tokens,
+    LlvmIr,
 }
-
 
 fn main() {
     let args = CMDArgs::parse();
@@ -53,34 +57,115 @@ fn main() {
                     // alpherac build -s main.alp
                     compile_program(build.source_file);
                 }
-                Some(BuildMode::Ast { output }) => {
+                Some(BuildMode::Ast) => {
                     // alpherac build ast -s main.alp output.dot
-                    print_ast_to_dot(build.source_file, output);
+                    //print_ast_to_dot(build.source_file, output);
+                    //alpherac build ast
+                    build_ast(build.source_file)
+                }
+                Some(BuildMode::Tokens) => {
+                    print_tokens(build.source_file);
+                }
+                Some(BuildMode::LlvmIr) => {
+                    build_llvm_ir(build.source_file)
                 }
             }
         }
     }
 }
 
-fn print_ast_to_dot(source: PathBuf, out_file: PathBuf) {
-    let source = handle_reading_file(source);
+fn _print_ast_to_dot(source: PathBuf, out_file: PathBuf) {
+    let source = handle_reading_file(&source);
     let tokens = lex(source.as_str());
-    print_tokens(tokens.clone());
+    let mut parser = Parser::new(tokens);
+    let res = parser.parse();
+    match res {
+        Ok(ast) => {
+            parser.dump_ast(ast, out_file);
+        }
+        Err(err) => {
+            eprintln!("{}", err);
+        }
+    }
+}
+
+fn build_ast(source: PathBuf) {
+    let source = handle_reading_file(&source);
+    let tokens = lex(source.as_str());
+    let mut parser = Parser::new(tokens);
+    let res = parser.parse();
+    match res {
+        Ok(ast) => {
+            println!("{:#?}", ast)
+        }
+        Err(err) => {
+            eprintln!("{}", err);
+        }
+    }
+}
+
+fn build_llvm_ir(file: PathBuf) {
+    let source = handle_reading_file(&file);
+    let tokens = lex(source.as_str());
     let mut parser = Parser::new(tokens);
     let ast = parser.parse();
-    parser.dump_ast(ast, out_file);
+    //
+    let file_name = file.to_str().unwrap();
+
+    let module_name = file_name
+        .split(".")
+        .next()
+        .map(|n| n.to_string())
+        .unwrap_or(file_name.replace(".alp", ""));
+
+    let ctx = CodeGen::create_context();
+    let mut codegen = CodeGen::new(&ctx, &module_name);
+    //println!("{:#?}", &ast);
+
+    let module_ref = codegen.compile(&ast.unwrap()).unwrap();
+
+    module_ref.print_to_stderr();
+    if module_ref.verify().is_err() {
+        panic!("Invalid LLVM IR");
+    }
+}
+
+fn print_tokens(file: PathBuf) {
+    let source = handle_reading_file(&file);
+    let tokens = lex(source.as_str());
+    _print_tokens(tokens.clone());
 }
 
 fn compile_program(file: PathBuf) {
-    let source = handle_reading_file(file);
+    let source = handle_reading_file(&file);
     let tokens = lex(source.as_str());
-    print_tokens(tokens.clone());
     let mut parser = Parser::new(tokens);
     let ast = parser.parse();
-    println!("{:?}", ast);
+    //
+    let file_name = file.to_str().unwrap();
+
+    let module_name = file_name
+        .split(".")
+        .next()
+        .map(|n| n.to_string())
+        .unwrap_or(file_name.replace(".alp", ""));
+
+    let ctx = CodeGen::create_context();
+    let mut codegen = CodeGen::new(&ctx, &module_name);
+    //println!("{:#?}", &ast);
+
+    let module_ref = codegen.compile(&ast.unwrap()).unwrap();
+
+    if module_ref.verify().is_err() {
+        module_ref.print_to_stderr();
+        panic!("Invalid LLVM IR");
+    }
+
+    linker::ObjectCompiler::compile_module(&module_ref, &module_name);
+    linker::ObjectLinker::link(&module_name, &module_name).unwrap();
 }
 
-fn handle_reading_file(source: PathBuf) -> String {
+fn handle_reading_file(source: &PathBuf) -> String {
     match read_from_file(source) {
         Ok(contents) => return contents,
         Err(e) => {
@@ -89,7 +174,7 @@ fn handle_reading_file(source: PathBuf) -> String {
     }
 }
 
-fn print_tokens(tokens: Vec<Token>) {
+fn _print_tokens(tokens: Vec<Token>) {
     for token in tokens {
         println!("{}: {:?}", token.lexeme, token.token_type);
     }

@@ -5,7 +5,7 @@ use std::io;
 use std::io::Write;
 
 
-pub fn read_from_file(file_name: PathBuf) -> Result<String, std::io::Error> {
+pub fn read_from_file(file_name: &PathBuf) -> Result<String, std::io::Error> {
     fs::read_to_string(file_name)
 }
 

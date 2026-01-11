@@ -1,5 +1,35 @@
-use lexer::lexer::TokenType;
+use lexer::lexer::{TokenType, Token};
 use std::convert::From;
+use crate::DataType;
+
+
+#[derive(Debug, Clone)]
+pub enum Statement {
+    VariableDeclaration(VarDecl),
+    FunctionDefinition(FunctionDefinition),
+    Return(ReturnStmt),
+    Expr(Expr)
+}
+
+#[derive(Debug, Clone)]
+pub struct ReturnStmt {
+    pub value: Option<Expr>
+}
+
+#[derive(Debug, Clone)]
+pub struct FunctionDefinition {
+    pub fn_name: Token,
+    pub ret_type: DataType,
+    pub fn_arguments: Vec<(String, Option<DataType>)>,
+    pub body: Vec<Statement>
+}
+
+#[derive(Debug, Clone)]
+pub struct VarDecl {
+    pub name: String,
+    pub value: Option<Expr>,
+    pub data_type: Option<DataType>,
+}
 
 // TODO: Store token for 
 // Accessing lexeme, line, col
@@ -16,13 +46,20 @@ pub enum Expr {
         right: Box<Expr>
     },
     Grouping(Box<Expr>),
+
+    Variable(lexer::lexer::Token),
+
+    FunctionCall {
+        callee: String,
+        args:   Vec<Expr>,
+    }
 }
 
 #[derive(Debug, Clone)]
 pub enum Literal {
     // TODO: Support more types, be specific
     // Handle better
-    Number(usize),
+    Number(i64),
     String(String),
     Boolean(bool),
     None,
@@ -75,16 +112,23 @@ impl From<TokenType> for BinaryOp {
 }
 
 impl UnaryOp {
-    fn as_str(self) -> &'static str {
+    pub fn as_str(self) -> &'static str {
         match self {
             UnaryOp::Bang => "Unary\n!",
             UnaryOp::Minus => "Unary\n-",
         }
     }
+
+    pub fn as_literal(self) -> &'static str {
+        match self {
+            UnaryOp::Bang => "!",
+            UnaryOp::Minus => "-",
+        }
+    }
 }
 
 impl BinaryOp {
-    fn as_str(self) -> &'static str {
+    pub fn as_str(self) -> &'static str {
         match self {
             BinaryOp::Plus => "Binary\n+",
 					  BinaryOp::Minus => "Binary\n-",
@@ -97,6 +141,22 @@ impl BinaryOp {
 					  BinaryOp::GreaterEqual => "Binary\n>=",
             BinaryOp::Lesser => "Binary\n<",
 					  BinaryOp::LesserEqual => "Binary\n<=",
+        }
+    }
+
+    pub fn as_literal(self) -> &'static str {
+        match self {
+            BinaryOp::Plus => "+",
+					  BinaryOp::Minus => "-",
+            BinaryOp::Star => "*",
+					  BinaryOp::Slash => "/",
+
+            BinaryOp::EqualEqual => "==",
+					  BinaryOp::NotEqual => "!=",
+            BinaryOp::Greater  => ">",
+					  BinaryOp::GreaterEqual => ">=",
+            BinaryOp::Lesser => "<",
+					  BinaryOp::LesserEqual => "<=",
         }
     }
 }
@@ -119,9 +179,17 @@ impl Expr {
             Expr::Binary{left, op, right} => "Binary",
             Expr::Literal(_lit) => "Literal",
             Expr::Grouping(_expr) => "Grouping",
+            Expr::Variable(_var) => "Variable",
+            Expr::FunctionCall{..} => "Function call",
         }
     }
 }
+
+#[derive(Debug, Clone)]
+pub struct PrintStmt {
+    pub expr: Expr,
+}
+
 
 //void dump_dot(Node* root) {
 //    size_t index = root - node_pool;
@@ -214,6 +282,13 @@ pub mod ast_printer {
                 printer.append_output(parent, grp_idx, group_str);
                 dump_dot(printer, group, grp_idx);
             },
+
+            Expr::Variable(var) => {
+                let op_idx = printer.next_index();
+                printer.append_output(parent, op_idx, &var.lexeme);
+            }
+
+            _ => unimplemented!(),
         }
     }
 }
