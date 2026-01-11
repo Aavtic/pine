@@ -3,8 +3,9 @@ members = [
     "crates/lexer",
     "crates/parser",
     "crates/ast",
+    "crates/analyzer",
     "crates/ir",
     "crates/codegen",
-    "tools/alpherac", "crates/utils",
+    "tools/alpherac", "crates/utils", "crates/analyzer", "crates/linker",
 ]
 
