@@ -1,4 +1,4 @@
-# Alphera lang
+# Pine lang
 
 > [!WARNING]
 > This language is work in progress
