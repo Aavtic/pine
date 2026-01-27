@@ -2,7 +2,6 @@ use std::collections::HashMap;
 
 use crate::{function::Function, variable::Variable};
 
-use analyzer::analyzer::Analyzer;
 use ast::{DataType, Expr, Literal, Statement};
 
 use inkwell::{
@@ -79,7 +78,7 @@ impl<'ctx> CodeGen<'ctx> {
                 let ret_type = fndef.ret_type.clone();
 
                 for arg in &fndef.fn_arguments {
-                    input.push((arg.0.clone(), arg.1.as_ref().unwrap().clone()))
+                    input.push((arg.0.clone(), arg.1.clone()))
                 }
 
                 self.declare_function(fn_name, input.as_slice(), &ret_type)
@@ -162,7 +161,7 @@ impl<'ctx> CodeGen<'ctx> {
                         .get_nth_param(i as u32)
                         .unwrap()
                         .into_int_value();
-                    let datatype = datatype.clone().unwrap();
+                    let datatype = datatype.clone();
                     let alloca = self
                         .create_entry_block_alloca(&function.value, name, &datatype)
                         .unwrap();
@@ -202,8 +201,8 @@ impl<'ctx> CodeGen<'ctx> {
             }
 
             Statement::VariableDeclaration(vardecl) => {
-                let expr = vardecl.clone().value.unwrap();
-                let val = self.compile_expression(expr, None)?;
+                let expr = vardecl.clone().value;
+                let val = self.compile_expression(expr.expr, Some(expr.ty))?;
 
                 if let Some(variable) = self.variables.get(&vardecl.name) {
                     self.builder.build_store(variable.ptr, val).unwrap();
@@ -231,7 +230,7 @@ impl<'ctx> CodeGen<'ctx> {
 
             Statement::Return(ret_stmt) => {
                 if let Some(expr) = &ret_stmt.value {
-                    let value = self.compile_expression(expr.clone(), None)?;
+                    let value = self.compile_expression(expr.expr.clone(), Some(expr.ty.clone()))?;
                     self.builder.build_return(Some(&value)).unwrap();
                     return Ok(Some(value));
                 } else {
@@ -249,7 +248,7 @@ impl<'ctx> CodeGen<'ctx> {
             }
 
             Statement::Expr(expr) => {
-                let value = self.compile_expression(expr.clone(), None)?;
+                let value = self.compile_expression(expr.expr.clone(), Some(expr.ty.clone()))?;
                 return Ok(Some(value))
             }
         }
@@ -270,8 +269,7 @@ impl<'ctx> CodeGen<'ctx> {
                 _ => unimplemented!(),
             },
 
-            Expr::Variable(var) => {
-                let name = var.lexeme;
+            Expr::Variable{name, ..} => {
                 let variable = self
                     .variables
                     .get(&name)
@@ -287,7 +285,7 @@ impl<'ctx> CodeGen<'ctx> {
             }
 
             Expr::Unary { op, right } => {
-                let val = self.compile_expression(*right, None)?;
+                let val = self.compile_expression(right.expr, Some(right.ty))?;
 
                 match op {
                     ast::UnaryOp::Bang => return Ok(self.builder.build_not(val, "not").unwrap()),
@@ -298,8 +296,8 @@ impl<'ctx> CodeGen<'ctx> {
             }
 
             Expr::Binary { left, op, right } => {
-                let l = self.compile_expression(*left, None)?;
-                let r = self.compile_expression(*right, None)?;
+                let l = self.compile_expression(left.expr, Some(left.ty))?;
+                let r = self.compile_expression(right.expr, Some(right.ty))?;
 
                 use ast::BinaryOp;
 
@@ -372,13 +370,30 @@ impl<'ctx> CodeGen<'ctx> {
             },
 
             Expr::Grouping(expr) => {
-                let value = self.compile_expression(*expr, None)?;
+                let value = self.compile_expression(expr.expr, Some(expr.ty))?;
                 return Ok(value);
             }
 
-            Expr::FunctionCall{callee, args} => {
-                //let callee = self.compile_expression(*callee, None);
-                todo!();
+            Expr::FunctionCall{callee, args, name} => {
+                // TODO resolve callee
+                //let callee = self.compile_expression(callee.expr, Some(callee.ty))?;
+
+                let function = self.functions
+                    .get(&name)
+                    .cloned()
+                    .ok_or_else(|| format!("Undefined function: {}", name))?;
+
+                let arg_values: Vec<BasicMetadataValueEnum> = args
+                    .iter()
+                    .map(|a| self.compile_expression(a.expr.clone(), Some(a.ty.clone())).map(|v| v.into()))
+                    .collect::<Result<_, _>>()?;
+
+                let call = self.
+                    builder.
+                    build_call(function.value, &arg_values, "call")
+                    .unwrap();
+
+                Ok(call.try_as_basic_value().unwrap_basic().into_int_value())
             }
 
         }

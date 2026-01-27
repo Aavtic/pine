@@ -1,8 +1,13 @@
-fn max(num1: i32, num2: i32) -> i32 {
-    return num1 + num2
+fn add(n1: i32, n2: i32) -> i32 {
+    return n1 + n2
+}
+
+fn sum(a: i32, b: i32) -> i32 {
+    let s: i32 = add(a, b);
+    return s
 }
 
 fn main() -> i32 {
-    func1()
-    return 54
+    let res: i32 = sum(10, 20)
+    return res;
 }

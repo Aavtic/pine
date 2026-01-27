@@ -127,7 +127,7 @@ impl Parser {
 
 
         if let Ok(expr) = self.expression() {
-            return Some(ast::Statement::Expr(expr))
+            return Some(ast::Statement::Expr(expr));
         }
 
         self._report_error(ParseError::UnexpectedToken(self.peek().lexeme.clone(), self.peek().line, self.peek().column));
@@ -154,11 +154,11 @@ impl Parser {
             }
 
             let identifier = self.consume(TokenType::Identifier, format!("Parameter identifier expected, Found `{}`", self.peek().lexeme).as_str())?;
-            let mut data_type = None;
+            let mut data_type = DataType::Unknown;
             if self.check(TokenType::Colon) {
                 self.advance();
                 let datatype_lexeme = self.consume(TokenType::Identifier, format!("Expected Type, Found `{}`", self.peek().lexeme).as_str())?.lexeme;
-                data_type = Some(DataType::from(&datatype_lexeme));
+                data_type = DataType::from(&datatype_lexeme);
             }
             arguments.push((identifier.lexeme.to_string(), data_type));
         }
@@ -167,7 +167,7 @@ impl Parser {
 
 
         // Now Check if Function return type is defined
-        let mut return_type = DataType::Void;
+        let mut return_type = DataType::Unknown;
         if self.check(TokenType::RightArrow) {
             self.advance();
             let return_type_lexeme = self.consume(TokenType::Identifier, format!("Expected Function Return type after `->`, found: {}", self.peek().lexeme ).as_str())?.lexeme;
@@ -216,7 +216,6 @@ impl Parser {
     fn var_declaration(&mut self) -> Result<ast::VarDecl, ParseError> {
         let name = self.consume(TokenType::Identifier, "Expected Variable name")?;
         let mut data_type = None;
-        let mut initializer = None;
 
         if self.check(TokenType::Colon) {
             self.advance();
@@ -224,9 +223,9 @@ impl Parser {
             data_type = Some(DataType::from(&datatype_lexeme));
         }
 
-        if matches_token!(self, TokenType::Equal) {
-            initializer = Some(self.expression()?);
-        }
+        self.consume(TokenType::Equal, "Expected `=`, and provide initializing value");
+
+        let initializer = self.expression()?;
 
         if self.check(TokenType::SemiColon) {
             self.advance();
@@ -234,13 +233,14 @@ impl Parser {
 
         Ok(ast::VarDecl {
             name: name.lexeme,
+            // We need value
             value: initializer,
             data_type,
         })
     }
 
-    fn expression(&mut self) -> Result<ast::Expr, ParseError> {
-        return self.equality();
+    fn expression(&mut self) -> Result<ast::TypedExpr, ParseError> {
+        return Ok(ast::TypedExpr::unknown(self.equality()?));
     }
 
     fn equality(&mut self) -> Result<ast::Expr, ParseError> {
@@ -259,9 +259,9 @@ impl Parser {
             };
 
             expr = Ok(ast::Expr::Binary {
-                left: Box::new(expr.unwrap()),
+                left: Box::new(ast::TypedExpr::unknown(expr.unwrap())),
                 op: ast::BinaryOp::from(operator.token_type),
-                right: Box::new(right.unwrap()),
+                right: Box::new(ast::TypedExpr::unknown(right.unwrap())),
             })
         }
 
@@ -290,9 +290,9 @@ impl Parser {
             };
 
             expr = Ok(ast::Expr::Binary {
-                left: Box::new(expr.unwrap()),
+                left: Box::new(ast::TypedExpr::unknown(expr.unwrap())),
                 op: ast::BinaryOp::from(operator.token_type),
-                right: Box::new(right.unwrap()),
+                right: Box::new(ast::TypedExpr::unknown(right.unwrap())),
             });
         }
 
@@ -314,9 +314,9 @@ impl Parser {
             };
 
             expr = Ok(ast::Expr::Binary {
-                left: Box::new(expr.unwrap()),
+                left: Box::new(ast::TypedExpr::unknown(expr.unwrap())),
                 op: ast::BinaryOp::from(operator.token_type),
-                right: Box::new(right.unwrap()),
+                right: Box::new(ast::TypedExpr::unknown(right.unwrap())),
             });
         }
 
@@ -339,9 +339,9 @@ impl Parser {
             };
 
             expr = Ok(ast::Expr::Binary {
-                left: Box::new(expr.unwrap()),
+                left: Box::new(ast::TypedExpr::unknown(expr.unwrap())),
                 op: ast::BinaryOp::from(operator.token_type),
-                right: Box::new(right.unwrap()),
+                right: Box::new(ast::TypedExpr::unknown(right.unwrap())),
             });
         }
 
@@ -360,7 +360,7 @@ impl Parser {
             return Ok(ast::Expr::Unary {
                 op: ast::UnaryOp::from(operator.token_type),
                 // This should be safe
-                right: Box::new(right.unwrap()),
+                right: Box::new(ast::TypedExpr::unknown(right.unwrap())),
             });
         }
 
@@ -374,9 +374,11 @@ impl Parser {
             return expr;
         }
 
+        let name = self.previous().lexeme;
+
         loop {
             if matches_token!(self, TokenType::OpenPara) {
-                expr = self.finish_call(expr?);
+                expr = self.finish_call(expr.unwrap(), name.clone());
             } else {
                 break;
             }
@@ -385,7 +387,7 @@ impl Parser {
         return expr;
     }
 
-    fn finish_call(&mut self, callee: ast::Expr) -> Result<ast::Expr, ParseError> {
+    fn finish_call(&mut self, callee: ast::Expr, name: String) -> Result<ast::Expr, ParseError> {
         let mut arguments = Vec::new();
 
         if !self.check(TokenType::ClosePara) {
@@ -403,7 +405,8 @@ impl Parser {
 
         return Ok(
             ast::Expr::FunctionCall{
-                callee: Box::new(callee),
+                name,
+                callee: Box::new(ast::TypedExpr::unknown(callee)),
                 args: arguments,
             }
         )
@@ -443,18 +446,22 @@ impl Parser {
         if matches_token!(self, TokenType::OpenPara) {
             let expr = self.expression();
             if expr.is_err() {
-                return expr;
+                return Err(expr.err().unwrap());
             }
 
             if let Err(e) = self.consume(TokenType::ClosePara, "Expected ')' after expression") {
                 return Err(e);
             }
 
-            return Ok(ast::Expr::Grouping(Box::new(expr.unwrap())));
+            return Ok(ast::Expr::Grouping(Box::new(ast::TypedExpr::unknown(expr.unwrap().expr))));
         }
 
         if matches_token!(self, TokenType::Identifier) {
-            return Ok(ast::Expr::Variable(self.previous()));
+            let tok = self.previous();
+            return Ok(ast::Expr::Variable {
+                name: tok.lexeme.clone(),
+                tok: tok,
+            });
         }
 
 
