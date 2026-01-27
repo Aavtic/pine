@@ -3,10 +3,12 @@ use std::path::PathBuf;
 
 use clap::{Args, Subcommand};
 
-use codegen::codegen::CodeGen;
 use lexer::lexer::{Token, lex};
-use linker::linker;
 use parser::parser::Parser;
+use analyzer::analyzer::Analyzer;
+use codegen::codegen::CodeGen;
+use linker::linker;
+
 use utils::read_from_file;
 
 /// Alphera Compiler
@@ -140,9 +142,15 @@ fn compile_program(file: PathBuf) {
     let source = handle_reading_file(&file);
     let tokens = lex(source.as_str());
     let mut parser = Parser::new(tokens);
-    let ast = parser.parse();
-    //
+    let mut ast = parser.parse().unwrap_or_else(|err| panic!("Couldn't parse the program due to: \n{}", err));
+
     let file_name = file.to_str().unwrap();
+
+    let analyzer = Analyzer::new();
+    if let Err(err) = analyzer.analyze(&mut ast) {
+        eprintln!("Type Check failed due to:\n{}", err);
+        return
+    }
 
     let module_name = file_name
         .split(".")
@@ -154,7 +162,7 @@ fn compile_program(file: PathBuf) {
     let mut codegen = CodeGen::new(&ctx, &module_name);
     //println!("{:#?}", &ast);
 
-    let module_ref = codegen.compile(&ast.unwrap()).unwrap();
+    let module_ref = codegen.compile(&ast).unwrap();
 
     if module_ref.verify().is_err() {
         module_ref.print_to_stderr();
