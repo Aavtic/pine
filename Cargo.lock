@@ -3,18 +3,6 @@
 version = 4
 
 [[package]]
-name = "alpherac"
-version = "0.1.0"
-dependencies = [
- "clap",
- "codegen",
- "lexer",
- "linker",
- "parser",
- "utils",
-]
-
-[[package]]
 name = "analyzer"
 version = "0.1.0"
 dependencies = [
@@ -251,6 +239,19 @@ version = "0.1.0"
 dependencies = [
  "ast",
  "lexer",
+]
+
+[[package]]
+name = "pinec"
+version = "0.1.0"
+dependencies = [
+ "analyzer",
+ "clap",
+ "codegen",
+ "lexer",
+ "linker",
+ "parser",
+ "utils",
 ]
 
 [[package]]
