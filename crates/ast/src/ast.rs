@@ -8,26 +8,48 @@ pub enum Statement {
     VariableDeclaration(VarDecl),
     FunctionDefinition(FunctionDefinition),
     Return(ReturnStmt),
-    Expr(Expr)
+    Expr(TypedExpr),
+}
+
+#[derive(Debug, Clone)]
+pub struct TypedExpr {
+    pub expr: Expr,
+    pub ty: DataType,
+}
+
+impl TypedExpr {
+    pub fn new(expr: Expr, ty: DataType) -> Self {
+        Self {
+            expr,
+            ty,
+        }
+    }
+
+    pub fn unknown(expr: Expr) -> Self {
+        Self {
+            expr,
+            ty: DataType::Unknown,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct ReturnStmt {
-    pub value: Option<Expr>
+    pub value: Option<TypedExpr>
 }
 
 #[derive(Debug, Clone)]
 pub struct FunctionDefinition {
     pub fn_name: Token,
     pub ret_type: DataType,
-    pub fn_arguments: Vec<(String, Option<DataType>)>,
+    pub fn_arguments: Vec<(String, DataType)>,
     pub body: Vec<Statement>
 }
 
 #[derive(Debug, Clone)]
 pub struct VarDecl {
     pub name: String,
-    pub value: Option<Expr>,
+    pub value: TypedExpr,
     pub data_type: Option<DataType>,
 }
 
@@ -38,20 +60,25 @@ pub enum Expr {
     Literal(Literal),
     Unary {
         op: UnaryOp, 
-        right: Box<Expr>,
+        right: Box<TypedExpr>,
     },
     Binary {
-        left: Box<Expr>,
+        left: Box<TypedExpr>,
         op: BinaryOp,
-        right: Box<Expr>
+        right: Box<TypedExpr>
     },
-    Grouping(Box<Expr>),
+    Grouping(Box<TypedExpr>),
 
-    Variable(lexer::lexer::Token),
+    Variable {
+        name: String,
+        tok: Token,
+    },
 
     FunctionCall {
-        callee: String,
-        args:   Vec<Expr>,
+        // Temp. For prototyping
+        name: String,
+        callee: Box<TypedExpr>,
+        args:   Vec<TypedExpr>,
     }
 }
 
@@ -179,7 +206,7 @@ impl Expr {
             Expr::Binary{left, op, right} => "Binary",
             Expr::Literal(_lit) => "Literal",
             Expr::Grouping(_expr) => "Grouping",
-            Expr::Variable(_var) => "Variable",
+            Expr::Variable{..} => "Variable",
             Expr::FunctionCall{..} => "Function call",
         }
     }
@@ -260,33 +287,33 @@ pub mod ast_printer {
 
     pub fn dump_dot(printer: &mut Printer, ast: Expr, parent: i32) {
         match ast {
-            Expr::Unary{op, right} => {
-                let op_idx = printer.next_index();
-                printer.append_output(parent, op_idx, op.as_str());
-                dump_dot(printer, *right, op_idx);
-            }
-            Expr::Binary {left, op, right} => {
-                let op_idx = printer.next_index();
-                printer.append_output(parent, op_idx, op.as_str());
-                dump_dot(printer, *left, op_idx);
-                dump_dot(printer, *right, op_idx);
-            },
-            Expr::Literal(literal) => {
-                let op_idx = printer.next_index();
-                printer.append_output(parent, op_idx, &literal.as_string());
-            },
-            Expr::Grouping(expr) => {
-                let grp_idx = printer.next_index();
-                let group = (*expr).clone();
-                let group_str = group.clone().as_str();
-                printer.append_output(parent, grp_idx, group_str);
-                dump_dot(printer, group, grp_idx);
-            },
-
-            Expr::Variable(var) => {
-                let op_idx = printer.next_index();
-                printer.append_output(parent, op_idx, &var.lexeme);
-            }
+            //Expr::Unary{op, right} => {
+            //    let op_idx = printer.next_index();
+            //    printer.append_output(parent, op_idx, op.as_str());
+            //    dump_dot(printer, *right, op_idx);
+            //}
+            //Expr::Binary {left, op, right} => {
+            //    let op_idx = printer.next_index();
+            //    printer.append_output(parent, op_idx, op.as_str());
+            //    dump_dot(printer, *left, op_idx);
+            //    dump_dot(printer, *right, op_idx);
+            //},
+            //Expr::Literal(literal) => {
+            //    let op_idx = printer.next_index();
+            //    printer.append_output(parent, op_idx, &literal.as_string());
+            //},
+            //Expr::Grouping(expr) => {
+            //    let grp_idx = printer.next_index();
+            //    let group = (*expr).clone();
+            //    let group_str = group.clone().as_str();
+            //    printer.append_output(parent, grp_idx, group_str);
+            //    dump_dot(printer, group, grp_idx);
+            //},
+            //
+            //Expr::Variable{name, ..} => {
+            //    let op_idx = printer.next_index();
+            //    printer.append_output(parent, op_idx, &name);
+            //}
 
             _ => unimplemented!(),
         }

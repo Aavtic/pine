@@ -7,7 +7,10 @@ pub enum DataType {
     U64,
     String,
     Void,
-    Custom(String)
+    Boolean,
+    Function {params: Vec<DataType>, ret_type: Box<DataType>},
+    // For passing ast without type check
+    Unknown,
 }
 
 impl DataType {
@@ -19,7 +22,9 @@ impl DataType {
             DataType::I64 => "i32",
             DataType::String => "string",
             DataType::Void  => "void",
-            DataType::Custom(_cust) => "custom",
+            DataType::Boolean => "boolean",
+            DataType::Function{..} => "function",
+            DataType::Unknown => "unknown",
         }
     }
 }
@@ -31,7 +36,47 @@ impl DataType {
             "u64" => DataType::U64,
             "i32" => DataType::I32,
             "i64" => DataType::U64,
-            _     => DataType::Custom(lexeme.to_string()),
+            _     => DataType::Unknown,
+        }
+    }
+}
+
+impl DataType {
+    pub fn unify(&self, other: &DataType) -> Result<DataType, String> {
+        match (self, other) {
+            // Same types can unify
+            (DataType::I32, DataType::I32) => Ok(DataType::I32),
+            (DataType::I64, DataType::I64) => Ok(DataType::I64),
+            (DataType::U64, DataType::U64) => Ok(DataType::U64),
+            (DataType::Boolean, DataType::Boolean) => Ok(DataType::Boolean),
+            (DataType::Void, DataType::Void) => Ok(DataType::Void),
+
+            // Unknown types can unify with anything
+
+            (DataType::Unknown, t) => Ok(t.clone()),
+
+            (
+                DataType::Function {
+                    params: p1, ret_type: r1,
+            },
+                DataType::Function {
+                    params: p2, ret_type: r2,
+                }
+            ) => {
+                let params: Result<Vec<_>, _> =
+                    p1.iter().zip(p2.iter()).map(|(a, b)| a.unify(b)).collect();
+                let ret = r1.unify(r2)?;
+                Ok(DataType::Function {
+                    params: params?,
+                    ret_type: Box::new(ret),
+                })
+            }
+
+            // Type mismatch
+            _ => Err(format!(
+                "Type mismatch: expected {}, got {}",
+                other.to_str(), self.to_str()
+            )),
         }
     }
 }
