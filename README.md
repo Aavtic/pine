@@ -28,6 +28,7 @@ pine/
 │   ├── lexer/
 │   ├── parser/
 │   ├── analyzer/
+│   ├── linker/
 │   ├── codegen/
 │   └── cli/
 ├── tools/
