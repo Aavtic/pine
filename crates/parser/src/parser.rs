@@ -187,10 +187,22 @@ impl Parser {
 
         // Now Check if Function return type is defined
         let mut return_type = DataType::Unknown;
+
         if self.check(TokenType::RightArrow) {
             self.advance();
-            let return_type_lexeme = self.consume(TokenType::Identifier, format!("Expected Function Return type after `->`, found: {}", self.peek().lexeme ).as_str())?.lexeme;
-            return_type = DataType::from(&return_type_lexeme);
+            let return_type_tok = self.consume(TokenType::Identifier, format!("Expected Function Return type after `->`, found: {}", self.peek().lexeme ).as_str())?;
+            return_type = DataType::from(&return_type_tok.lexeme);
+
+            if fn_name.lexeme == "main" {
+                if return_type != DataType::I32 {
+                    return Err(ParseError::ParseError(format!("main function should only return i32, found {}", return_type.to_str()), return_type_tok.line, return_type_tok.column))
+                }
+            }
+        }
+
+        // Main function by default returns i32
+        if fn_name.lexeme == "main" {
+            return_type = DataType::I32;
         }
 
         self.consume(TokenType::OpenCurly, format!("Expected `{{`, Found: `{}`", self.peek().lexeme).as_str())?;

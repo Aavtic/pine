@@ -1,6 +1,7 @@
-fn main() -> i32 {
-    let a = 10;
-    let b = 20 / 2;
-    let c = a + a;
-    return c
+fn add(a: i32, b: i32) -> i32 {
+    return a + b
+}
+
+fn main() {
+    return add(34, 35)
 }
