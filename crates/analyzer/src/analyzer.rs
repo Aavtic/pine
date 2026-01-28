@@ -192,7 +192,7 @@ impl Analyzer {
                                 right.ty.to_str()
                             ));
                         }
-                        expr.ty = DataType::I32;
+                        expr.ty = DataType::Boolean;
                     }
 
                     BinaryOp::EqualEqual | BinaryOp::NotEqual => {
@@ -235,8 +235,34 @@ impl Analyzer {
                 self.typecheck_expr(ex, env)?;
                 expr.ty = ex.ty.clone()
             }
-        }
 
+            Expr::If {
+                condition,
+                if_block,
+                else_block,
+            } => {
+                self.typecheck_expr(condition, env)?;
+
+                if condition.ty != DataType::Boolean {
+                    // Worst error message
+                    // Improve this
+                    return Err(format!("Only Expressions resolving to a boolean is allowed in if condition"));
+                }
+
+                let mut if_block_env = env.clone();
+                let mut else_block_env = env.clone();
+
+                for stmt in if_block.iter_mut() {
+                    self.typecheck_statement(stmt, &mut if_block_env)?;
+                }
+
+                if else_block.is_some() {
+                    for stmt in else_block.as_mut().unwrap().iter_mut() {
+                        self.typecheck_statement(stmt, &mut else_block_env)?;
+                    }
+                }
+            }
+        }
         Ok(())
     }
 }

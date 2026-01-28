@@ -407,6 +407,95 @@ impl<'ctx> CodeGen<'ctx> {
                 Ok(call.try_as_basic_value().unwrap_basic().into_int_value())
             }
 
+            Expr::If{
+                condition,
+                if_block,
+                else_block,
+            } => {
+                let condition_val = self.compile_expression(condition.expr.clone(), Some(condition.ty.clone()))?;
+                // Build i1 for branching
+                let cond_bool = self
+                    .builder
+                    .build_int_truncate(condition_val, self.context.bool_type(), "cond")
+                    .unwrap();
+                
+                let function = self.current_fn.as_ref().unwrap();
+                let then_bb = self.context.append_basic_block(function.value, "then");
+                let else_bb = self.context.append_basic_block(function.value, "else");
+                let merge_bb = self.context.append_basic_block(function.value, "merge");
+
+                self.builder.build_conditional_branch(cond_bool, then_bb, else_bb).unwrap();
+
+                // Then block
+                self.builder.position_at_end(then_bb);
+                let mut then_val = self.context.i64_type().const_int(0, false);
+
+                for stmt in if_block {
+                    if let Some(val) = self.compile_statement(&stmt, None)? {
+                        then_val = val;
+                    }
+                }
+
+                let then_end = self.builder.get_insert_block().unwrap();
+                let then_has_terminator = then_end.get_terminator().is_some();
+
+                if !then_has_terminator {
+                    // Go to merge block because there is no terminator in if block
+                    self.builder.build_unconditional_branch(merge_bb).unwrap();
+                }
+
+                // Else block
+                self.builder.position_at_end(else_bb);
+                let mut else_val = then_val.get_type().const_int(0, false);
+
+                if else_block.is_some() {
+                    for stmt in else_block.unwrap() {
+                        if let Some(val) = self.compile_statement(&stmt, None)? {
+                            else_val = val;
+                        }
+                    }
+                }
+
+                let else_end = self.builder.get_insert_block().unwrap();
+                let else_has_terminator = else_end.get_terminator().is_some();
+
+                if !else_has_terminator {
+                    self.builder.build_unconditional_branch(merge_bb).unwrap();
+                }
+
+                // Merge only if one of the branch reaches it
+                // if none then delete the merge block
+
+                if then_has_terminator && else_has_terminator {
+                    // Both branches return/terminate, merge block is unreachable
+                    // Remove it and return a dummy value
+                    unsafe {
+                        merge_bb.delete().unwrap();
+                    }
+                    // Return a dummy value - the actual return happened in the branches
+                    return Ok(self.context.i64_type().const_int(0, false))
+                } else {
+                    self.builder.position_at_end(merge_bb);
+
+                    let phi_ty = then_val.get_type();
+                    assert_eq!(then_val.get_type(), else_val.get_type());
+
+                    let phi = self
+                        .builder
+                        .build_phi(phi_ty, "phi")
+                        .unwrap();
+
+                    if !then_has_terminator {
+                        phi.add_incoming(&[(&then_val, then_end)]);
+                    }
+
+                    if !else_has_terminator {
+                        phi.add_incoming(&[(&else_val, else_end)]);
+                    }
+
+                    return Ok(phi.as_basic_value().into_int_value())
+                }
+            }
         }
     }
 
@@ -505,7 +594,7 @@ impl<'ctx> CodeGen<'ctx> {
             DataType::I64 => Ok(self.context.i64_type()),
             DataType::U32 => Ok(self.context.i32_type()),
             DataType::U64 => Ok(self.context.i32_type()),
-            _ => unimplemented!(),
+            _ => unimplemented!("{}", format!("{} is not implemented", typ.to_str())),
         }
     }
 }

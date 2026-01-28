@@ -62,7 +62,7 @@ impl Parser {
         while !self.is_end() {
             match self.statement() {
                 Some(statement) => statements.push(statement),
-                None => {},
+                None => {}
             }
         }
         Ok(statements)
@@ -74,14 +74,14 @@ impl Parser {
         // TODO:
         // Handle Error handling
         //
-    //    for statement in ast {
-    //        match statement {
-    //            ast::Statements::(stmt) => {
-    //                    printer.generate_dump_dot(expr),
-    //            },
-    //            _ => unimplemented!(),
-    //        }
-    //    }
+        //    for statement in ast {
+        //        match statement {
+        //            ast::Statements::(stmt) => {
+        //                    printer.generate_dump_dot(expr),
+        //            },
+        //            _ => unimplemented!(),
+        //        }
+        //    }
     }
 }
 
@@ -95,8 +95,8 @@ impl Parser {
                     self._report_error(err);
                     self.print_current_error();
                     self.synchronize();
-                    return None
-                },
+                    return None;
+                }
             }
         }
 
@@ -107,11 +107,10 @@ impl Parser {
                     self._report_error(err);
                     self.print_current_error();
                     self.synchronize();
-                    return None
+                    return None;
                 }
             }
         }
-
 
         if matches_token!(self, TokenType::Return) {
             match self.return_statement() {
@@ -120,7 +119,7 @@ impl Parser {
                     self._report_error(err);
                     self.print_current_error();
                     self.synchronize();
-                    return None
+                    return None;
                 }
             }
         }
@@ -136,7 +135,7 @@ impl Parser {
                         self._report_error(err);
                         self.print_current_error();
                         self.synchronize();
-                        return None
+                        return None;
                     }
                 }
             } else {
@@ -149,7 +148,11 @@ impl Parser {
             return Some(ast::Statement::Expr(expr));
         }
 
-        self._report_error(ParseError::UnexpectedToken(self.peek().lexeme.clone(), self.peek().line, self.peek().column));
+        self._report_error(ParseError::UnexpectedToken(
+            self.peek().lexeme.clone(),
+            self.peek().line,
+            self.peek().column,
+        ));
         self.print_current_error();
         self.synchronize();
 
@@ -169,67 +172,86 @@ impl Parser {
                     self.advance();
                 }
             } else {
-                return Err(ParseError::UnexpectedToken(format!("Unexpected Token Found: `{}`", self.peek().lexeme.to_string()), self.peek().line, self.peek().column))
+                return Err(ParseError::UnexpectedToken(
+                    format!(
+                        "Unexpected Token Found: `{}`",
+                        self.peek().lexeme.to_string()
+                    ),
+                    self.peek().line,
+                    self.peek().column,
+                ));
             }
 
-            let identifier = self.consume(TokenType::Identifier, format!("Parameter identifier expected, Found `{}`", self.peek().lexeme).as_str())?;
+            let identifier = self.consume(
+                TokenType::Identifier,
+                format!(
+                    "Parameter identifier expected, Found `{}`",
+                    self.peek().lexeme
+                )
+                .as_str(),
+            )?;
             let mut data_type = DataType::Unknown;
             if self.check(TokenType::Colon) {
                 self.advance();
-                let datatype_lexeme = self.consume(TokenType::Identifier, format!("Expected Type, Found `{}`", self.peek().lexeme).as_str())?.lexeme;
+                let datatype_lexeme = self
+                    .consume(
+                        TokenType::Identifier,
+                        format!("Expected Type, Found `{}`", self.peek().lexeme).as_str(),
+                    )?
+                    .lexeme;
                 data_type = DataType::from(&datatype_lexeme);
             }
             arguments.push((identifier.lexeme.to_string(), data_type));
         }
 
-        self.consume(TokenType::ClosePara, format!("Expected Closing para `)` found `{}`", self.peek().lexeme).as_str())?;
-
+        self.consume(
+            TokenType::ClosePara,
+            format!("Expected Closing para `)` found `{}`", self.peek().lexeme).as_str(),
+        )?;
 
         // Now Check if Function return type is defined
         let mut return_type = DataType::Unknown;
 
         if self.check(TokenType::RightArrow) {
             self.advance();
-            let return_type_tok = self.consume(TokenType::Identifier, format!("Expected Function Return type after `->`, found: {}", self.peek().lexeme ).as_str())?;
+            let return_type_tok = self.consume(
+                TokenType::Identifier,
+                format!(
+                    "Expected Function Return type after `->`, found: {}",
+                    self.peek().lexeme
+                )
+                .as_str(),
+            )?;
             return_type = DataType::from(&return_type_tok.lexeme);
 
             if fn_name.lexeme == "main" {
                 if return_type != DataType::I32 {
-                    return Err(ParseError::ParseError(format!("main function should only return i32, found {}", return_type.to_str()), return_type_tok.line, return_type_tok.column))
+                    return Err(ParseError::ParseError(
+                        format!(
+                            "main function should only return i32, found {}",
+                            return_type.to_str()
+                        ),
+                        return_type_tok.line,
+                        return_type_tok.column,
+                    ));
                 }
             }
         }
 
         // Main function by default returns i32
+        // Todo: move this to analyzer
         if fn_name.lexeme == "main" {
             return_type = DataType::I32;
         }
 
-        self.consume(TokenType::OpenCurly, format!("Expected `{{`, Found: `{}`", self.peek().lexeme).as_str())?;
+        let body = self.block_expression()?;
 
-
-        // Get the function body
-        // TODO: Refactor this to block() production rule to get all statements inside curly
-
-        let mut statements = Vec::new();
-
-        while !self.is_end() && !self.check(TokenType::CloseCurly) {
-            statements.push(
-                match self.statement() {
-                    Some(st) => st,
-                    None     => return Err(self.throw())
-                }
-            );
-        }
-
-        self.consume(TokenType::CloseCurly, "Expected }} after function definition")?;
-
-        return Ok(ast::FunctionDefinition{
+        return Ok(ast::FunctionDefinition {
             fn_name: fn_name,
             ret_type: return_type,
             fn_arguments: arguments,
-            body: statements,
-         })
+            body,
+        });
     }
 
     fn return_statement(&mut self) -> Result<ast::ReturnStmt, ParseError> {
@@ -239,9 +261,7 @@ impl Parser {
             self.advance();
         }
 
-        return Ok(ast::ReturnStmt{
-            value: expr,
-        })
+        return Ok(ast::ReturnStmt { value: expr });
     }
 
     fn var_declaration(&mut self) -> Result<ast::VarDecl, ParseError> {
@@ -250,11 +270,19 @@ impl Parser {
 
         if self.check(TokenType::Colon) {
             self.advance();
-            let datatype_lexeme = self.consume(TokenType::Identifier, format!("Expected Type after `:`, found: `{}`", self.peek().lexeme).as_str())?.lexeme;
+            let datatype_lexeme = self
+                .consume(
+                    TokenType::Identifier,
+                    format!("Expected Type after `:`, found: `{}`", self.peek().lexeme).as_str(),
+                )?
+                .lexeme;
             data_type = Some(DataType::from(&datatype_lexeme));
         }
 
-        self.consume(TokenType::Equal, "Expected `=`, and provide initializing value");
+        self.consume(
+            TokenType::Equal,
+            "Expected `=`, and provide initializing value",
+        )?;
 
         let initializer = self.expression()?;
 
@@ -272,7 +300,10 @@ impl Parser {
 
     fn assignment_statement(&mut self) -> Result<ast::Assign, ParseError> {
         let name = self.consume(TokenType::Identifier, "Expected Variable name")?;
-        self.consume(TokenType::Equal, "Expected `=`, and provide initializing value");
+        let _ = self.consume(
+            TokenType::Equal,
+            "Expected `=`, and provide initializing value",
+        );
 
         let value = self.expression()?;
 
@@ -287,7 +318,49 @@ impl Parser {
     }
 
     fn expression(&mut self) -> Result<ast::TypedExpr, ParseError> {
-        return Ok(ast::TypedExpr::unknown(self.equality()?));
+        return Ok(ast::TypedExpr::unknown(self.if_expression()?));
+    }
+
+    fn if_expression(&mut self) -> Result<ast::Expr, ParseError> {
+        if matches_token!(self, TokenType::If) {
+            let condition = self.expression()?;
+            let if_block = self.block_expression()?;
+            let else_block = if matches_token!(self, TokenType::Else) {
+                Some(self.block_expression()?)
+            } else {
+                None
+            };
+
+            return Ok(ast::Expr::If {
+                condition: Box::new(condition),
+                if_block,
+                else_block,
+            });
+        } else {
+            return self.equality();
+        }
+    }
+
+    fn block_expression(&mut self) -> Result<Vec<ast::Statement>, ParseError> {
+        self.consume(
+            TokenType::OpenCurly,
+            format!("Expected `{{`, Found: `{}`", self.peek().lexeme).as_str(),
+        )?;
+        let mut statements = Vec::new();
+
+        while !self.is_end() && !self.check(TokenType::CloseCurly) {
+            statements.push(match self.statement() {
+                Some(st) => st,
+                None => return Err(self.throw()),
+            });
+        }
+
+        self.consume(
+            TokenType::CloseCurly,
+            "Expected }} after function definition",
+        )?;
+
+        return Ok(statements);
     }
 
     fn equality(&mut self) -> Result<ast::Expr, ParseError> {
@@ -442,21 +515,22 @@ impl Parser {
                 arguments.push(self.expression()?);
 
                 if !self.check(TokenType::Comma) {
-                    break
+                    break;
                 }
                 self.advance(); // advance the comma
             }
         }
 
-        self.consume(TokenType::ClosePara, "Expected closing bracket `)` after arguments")?;
+        self.consume(
+            TokenType::ClosePara,
+            "Expected closing bracket `)` after arguments",
+        )?;
 
-        return Ok(
-            ast::Expr::FunctionCall{
-                name,
-                callee: Box::new(ast::TypedExpr::unknown(callee)),
-                args: arguments,
-            }
-        )
+        return Ok(ast::Expr::FunctionCall {
+            name,
+            callee: Box::new(ast::TypedExpr::unknown(callee)),
+            args: arguments,
+        });
     }
 
     fn primary(&mut self) -> Result<ast::Expr, ParseError> {
@@ -500,7 +574,9 @@ impl Parser {
                 return Err(e);
             }
 
-            return Ok(ast::Expr::Grouping(Box::new(ast::TypedExpr::unknown(expr.unwrap().expr))));
+            return Ok(ast::Expr::Grouping(Box::new(ast::TypedExpr::unknown(
+                expr.unwrap().expr,
+            ))));
         }
 
         if matches_token!(self, TokenType::Identifier) {
@@ -510,7 +586,6 @@ impl Parser {
                 tok: tok,
             });
         }
-
 
         // Report unexpected token
         let token = self.peek();
@@ -525,7 +600,6 @@ impl Parser {
 
 // Helper Functions
 impl Parser {
-
     fn print_current_error(&self) {
         if self.errors.len() == 0 {
             return;
@@ -538,7 +612,11 @@ impl Parser {
         //if self.errors.len() == 0 {
         //    return;
         //}
-        self.errors.iter().nth(self.errors.len() - 1).unwrap().clone()
+        self.errors
+            .iter()
+            .nth(self.errors.len() - 1)
+            .unwrap()
+            .clone()
     }
 
     fn _report_error(&mut self, error: ParseError) {

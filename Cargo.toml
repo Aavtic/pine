@@ -4,7 +4,7 @@ members = [
     "crates/parser",
     "crates/ast",
     "crates/analyzer",
-    "crates/ir",
     "crates/codegen",
+    "crates/ir",
     "tools/pinec", "crates/utils", "crates/linker",
 ]

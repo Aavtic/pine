@@ -87,6 +87,12 @@ pub enum Expr {
         name: String,
         callee: Box<TypedExpr>,
         args:   Vec<TypedExpr>,
+    },
+
+    If {
+        condition: Box<TypedExpr>,
+        if_block: Vec<Statement>,
+        else_block: Option<Vec<Statement>>,
     }
 }
 
@@ -210,12 +216,13 @@ impl Literal {
 impl Expr {
     fn as_str(self) -> &'static str {
         match self {
-            Expr::Unary{op, right} => "Unary",
-            Expr::Binary{left, op, right} => "Binary",
-            Expr::Literal(_lit) => "Literal",
-            Expr::Grouping(_expr) => "Grouping",
-            Expr::Variable{..} => "Variable",
-            Expr::FunctionCall{..} => "Function call",
+            Expr::Unary{op, right} =>           "Unary",
+            Expr::Binary{left, op, right} =>    "Binary",
+            Expr::Literal(_lit) =>              "Literal",
+            Expr::Grouping(_expr) =>            "Grouping",
+            Expr::Variable{..} =>               "Variable",
+            Expr::FunctionCall{..} =>           "Function call",
+            Expr::If{..} =>                     "if",
         }
     }
 }
