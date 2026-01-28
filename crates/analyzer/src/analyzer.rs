@@ -83,6 +83,10 @@ impl Analyzer {
                     vardecl.value.ty.clone()
                 };
 
+                // Should we actually store the types in both vardecl.data_type and
+                // vardecl.value.ty ?
+                vardecl.data_type = Some(var_type.clone());
+
                 env.insert(vardecl.name.clone(), var_type.clone());
                 Ok(var_type)
             }
@@ -201,6 +205,7 @@ impl Analyzer {
 
             Expr::Grouping(ex) => {
                 self.typecheck_expr(ex, env)?;
+                expr.ty = ex.ty.clone()
             }
         }
 

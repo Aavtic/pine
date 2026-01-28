@@ -55,6 +55,9 @@ impl DataType {
 
             (DataType::Unknown, t) => Ok(t.clone()),
 
+            // This should be possible too r 
+            (t, DataType::Unknown) => Ok(t.clone()),
+
             (
                 DataType::Function {
                     params: p1, ret_type: r1,
@@ -75,7 +78,7 @@ impl DataType {
             // Type mismatch
             _ => Err(format!(
                 "Type mismatch: expected {}, got {}",
-                other.to_str(), self.to_str()
+                self.to_str(), other.to_str()
             )),
         }
     }
