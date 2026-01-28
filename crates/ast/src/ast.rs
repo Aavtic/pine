@@ -7,6 +7,7 @@ use crate::DataType;
 pub enum Statement {
     VariableDeclaration(VarDecl),
     FunctionDefinition(FunctionDefinition),
+    Assignment(Assign),
     Return(ReturnStmt),
     Expr(TypedExpr),
 }
@@ -51,6 +52,13 @@ pub struct VarDecl {
     pub name: String,
     pub value: TypedExpr,
     pub data_type: Option<DataType>,
+}
+
+
+#[derive(Debug, Clone)]
+pub struct Assign {
+    pub name: String,
+    pub value: TypedExpr,
 }
 
 // TODO: Store token for 

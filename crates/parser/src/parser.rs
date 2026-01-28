@@ -125,6 +125,25 @@ impl Parser {
             }
         }
 
+        if matches_token!(self, TokenType::Identifier) {
+            // Check if equal is present so that we can confirm assignment statement
+            if self.check(TokenType::Equal) {
+                // Get both the identifier back
+                self.backup();
+                match self.assignment_statement() {
+                    Ok(assign) => return Some(ast::Statement::Assignment(assign)),
+                    Err(err) => {
+                        self._report_error(err);
+                        self.print_current_error();
+                        self.synchronize();
+                        return None
+                    }
+                }
+            } else {
+                // Go to the identifier token
+                self.backup();
+            }
+        }
 
         if let Ok(expr) = self.expression() {
             return Some(ast::Statement::Expr(expr));
@@ -236,6 +255,22 @@ impl Parser {
             // We need value
             value: initializer,
             data_type,
+        })
+    }
+
+    fn assignment_statement(&mut self) -> Result<ast::Assign, ParseError> {
+        let name = self.consume(TokenType::Identifier, "Expected Variable name")?;
+        self.consume(TokenType::Equal, "Expected `=`, and provide initializing value");
+
+        let value = self.expression()?;
+
+        if self.check(TokenType::SemiColon) {
+            self.advance();
+        }
+
+        Ok(ast::Assign {
+            name: name.lexeme,
+            value,
         })
     }
 
@@ -487,13 +522,6 @@ impl Parser {
         println!("{}", error);
     }
 
-    fn get_current_error(&self) -> &ParseError{
-        //if self.errors.len() == 0 {
-        //    return;
-        //}
-        self.errors.iter().nth(self.errors.len() - 1).unwrap()
-    }
-
     fn throw(&self) -> ParseError {
         //if self.errors.len() == 0 {
         //    return;
@@ -527,6 +555,12 @@ impl Parser {
 
     fn previous(&self) -> Token {
         return self.tokens.get(self.current - 1).unwrap().clone();
+    }
+
+    fn backup(&mut self) {
+        if self.current > 0 {
+            self.current -= 1;
+        }
     }
 
     fn previous_check(&self, t: TokenType) -> bool {

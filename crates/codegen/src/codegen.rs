@@ -228,6 +228,17 @@ impl<'ctx> CodeGen<'ctx> {
                 return Ok(Some(val));
             }
 
+            Statement::Assignment(assign) => {
+                let compiled_value = self.compile_expression(assign.value.expr.clone(), Some(assign.value.ty.clone())).unwrap();
+                if let Some(variable) = self.variables.get(&assign.name) {
+                    self.builder.build_store(variable.ptr, compiled_value).unwrap();
+                } else {
+                    panic!("Variable not defined!, This is unreachable");
+                }
+
+                Ok(Some(compiled_value))
+            }
+
             Statement::Return(ret_stmt) => {
                 if let Some(expr) = &ret_stmt.value {
                     let value = self.compile_expression(expr.expr.clone(), Some(expr.ty.clone()))?;

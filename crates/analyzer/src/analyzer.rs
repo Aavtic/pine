@@ -86,6 +86,19 @@ impl Analyzer {
                 env.insert(vardecl.name.clone(), var_type.clone());
                 Ok(var_type)
             }
+
+            Statement::Assignment(assign) => {
+                self.typecheck_expr(&mut assign.value, env)?;
+
+                if let Some(ty) = env.get(&assign.name) {
+                    let _ = ty.unify(&assign.value.ty)?;
+                    return Ok(ty.clone())
+                } else {
+                    // TODO: Pass the line, col here
+                    return Err(format!("Variable not declared: {} at {}:{}", assign.name, 69, 69));
+                }
+            }
+
             Statement::Expr(ex) => {
                 self.typecheck_expr(ex, env)?;
                 Ok(ex.ty.clone())
