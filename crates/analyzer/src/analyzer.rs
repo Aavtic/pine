@@ -1,7 +1,6 @@
 use ast::Statement;
 use ast::types::DataType;
-use ast::{Expr, Literal, UnaryOp, BinaryOp};
-
+use ast::{BinaryOp, Expr, Literal, UnaryOp};
 
 use std::collections::HashMap;
 
@@ -11,7 +10,7 @@ pub struct Analyzer {}
 
 impl Analyzer {
     pub fn new() -> Self {
-        return Self{}
+        return Self {};
     }
 }
 
@@ -27,7 +26,7 @@ impl Analyzer {
                 let return_type = fndef.ret_type;
 
                 let param_types: Vec<DataType> = params.iter().map(|x| x.1.clone()).collect();
-                let func_type = DataType::Function{
+                let func_type = DataType::Function {
                     params: param_types,
                     ret_type: Box::new(return_type.clone()),
                 };
@@ -45,7 +44,11 @@ impl Analyzer {
         Ok(())
     }
 
-    fn typecheck_statement(&self, stmt: &mut Statement, env: &mut TypeEnv) -> Result<DataType, String> {
+    fn typecheck_statement(
+        &self,
+        stmt: &mut Statement,
+        env: &mut TypeEnv,
+    ) -> Result<DataType, String> {
         match stmt {
             Statement::FunctionDefinition(fndef) => {
                 // Create a local env with parameters
@@ -66,7 +69,7 @@ impl Analyzer {
                 }
 
                 // Look into this
-                return Ok(DataType::Void)
+                return Ok(DataType::Void);
             }
 
             Statement::Return(ret_stmt) => {
@@ -96,10 +99,13 @@ impl Analyzer {
 
                 if let Some(ty) = env.get(&assign.name) {
                     let _ = ty.unify(&assign.value.ty)?;
-                    return Ok(ty.clone())
+                    return Ok(ty.clone());
                 } else {
                     // TODO: Pass the line, col here
-                    return Err(format!("Variable not declared: {} at {}:{}", assign.name, 69, 69));
+                    return Err(format!(
+                        "Variable not declared: {} at {}:{}",
+                        assign.name, 69, 69
+                    ));
                 }
             }
 
@@ -107,7 +113,6 @@ impl Analyzer {
                 self.typecheck_expr(ex, env)?;
                 Ok(ex.ty.clone())
             }
-
         }
     }
 
@@ -122,30 +127,39 @@ impl Analyzer {
                     // It should have corresponding None representation in DataType
                     Literal::None => expr.ty = DataType::Void,
                 }
-            },
+            }
             // Have a dedicated Variable type in Parser. This is leaking from phase 1
-            Expr::Variable{name, tok} => {
+            Expr::Variable { name, tok } => {
                 if let Some(ty) = env.get(name.as_str()) {
                     expr.ty = ty.clone();
                 } else {
-                    return Err(format!("Undefined variable: {} at {}:{}", name, tok.line, tok.column));
+                    return Err(format!(
+                        "Undefined variable: {} at {}:{}",
+                        name, tok.line, tok.column
+                    ));
                 }
             }
 
-            Expr::Unary{op, right: inner} => {
+            Expr::Unary { op, right: inner } => {
                 self.typecheck_expr(inner, env)?;
 
                 match op {
                     UnaryOp::Minus => {
                         // Modify for other types
                         if inner.ty != DataType::I32 {
-                            return Err(format!("Cannot negate non-integer type: {}", inner.ty.to_str()));
+                            return Err(format!(
+                                "Cannot negate non-integer type: {}",
+                                inner.ty.to_str()
+                            ));
                         }
                         expr.ty = DataType::I32;
                     }
                     UnaryOp::Bang => {
                         if inner.ty != DataType::Boolean {
-                            return Err(format!("Cannot negate non-boolean type: {}", inner.ty.to_str()));
+                            return Err(format!(
+                                "Cannot negate non-boolean type: {}",
+                                inner.ty.to_str()
+                            ));
                         }
                         inner.ty = DataType::Boolean;
                     }
@@ -159,13 +173,24 @@ impl Analyzer {
                 match op {
                     BinaryOp::Plus | BinaryOp::Minus | BinaryOp::Star | BinaryOp::Slash => {
                         if left.ty != DataType::I32 || right.ty != DataType::I32 {
-                            return Err(format!("Binary Operation requires int operands, got {} and {}", left.ty.to_str(), right.ty.to_str()));
+                            return Err(format!(
+                                "Binary Operation requires int operands, got {} and {}",
+                                left.ty.to_str(),
+                                right.ty.to_str()
+                            ));
                         }
                         expr.ty = DataType::I32
                     }
-                    BinaryOp::Lesser | BinaryOp::Greater | BinaryOp::LesserEqual | BinaryOp::GreaterEqual => {
+                    BinaryOp::Lesser
+                    | BinaryOp::Greater
+                    | BinaryOp::LesserEqual
+                    | BinaryOp::GreaterEqual => {
                         if left.ty != DataType::I32 || right.ty != DataType::I32 {
-                            return Err(format!("Comparision requires int operands got {} and {}", left.ty.to_str(), right.ty.to_str()));
+                            return Err(format!(
+                                "Comparision requires int operands got {} and {}",
+                                left.ty.to_str(),
+                                right.ty.to_str()
+                            ));
                         }
                         expr.ty = DataType::I32;
                     }
@@ -177,7 +202,7 @@ impl Analyzer {
                 }
             }
 
-            Expr::FunctionCall {name, callee, args } => {
+            Expr::FunctionCall { name, callee, args } => {
                 self.typecheck_expr(callee, env)?;
 
                 let func_type = env
@@ -185,22 +210,25 @@ impl Analyzer {
                     .ok_or_else(|| format!("Undefined function: {}", name))?
                     .clone();
 
-              if let DataType::Function{params, ret_type} = func_type {
-                  if args.len() != params.len() {
-                      return Err(
-                        format!("Function {} expectes {} arguments, got {} arguments", name, params.len(), args.len())
-                      );
-                  }
+                if let DataType::Function { params, ret_type } = func_type {
+                    if args.len() != params.len() {
+                        return Err(format!(
+                            "Function {} expectes {} arguments, got {} arguments",
+                            name,
+                            params.len(),
+                            args.len()
+                        ));
+                    }
 
-                  for (arg, param_type) in args.iter_mut().zip(params) {
-                      self.typecheck_expr(arg, env)?;
-                      let _ = arg.ty.unify(&param_type)?;
-                  }
+                    for (arg, param_type) in args.iter_mut().zip(params) {
+                        self.typecheck_expr(arg, env)?;
+                        let _ = arg.ty.unify(&param_type)?;
+                    }
 
-                  expr.ty = *ret_type;
-              } else {
-                  return Err(format!("{} is not a function", name));
-              }
+                    expr.ty = *ret_type;
+                } else {
+                    return Err(format!("{} is not a function", name));
+                }
             }
 
             Expr::Grouping(ex) => {
@@ -234,9 +262,6 @@ impl Analyzer {
 
     #[inline]
     pub fn is_integer(typ: &DataType) -> bool {
-        [
-            DataType::I32, DataType::I64,
-            DataType::U32, DataType::U64
-        ].contains(typ)
+        [DataType::I32, DataType::I64, DataType::U32, DataType::U64].contains(typ)
     }
 }
