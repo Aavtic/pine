@@ -252,15 +252,24 @@ impl Analyzer {
                 let mut if_block_env = env.clone();
                 let mut else_block_env = env.clone();
 
+                let mut if_expr_ty = DataType::Unknown;
+                let mut else_expr_ty = DataType::Unknown;
+
                 for stmt in if_block.iter_mut() {
-                    self.typecheck_statement(stmt, &mut if_block_env)?;
+                    if_expr_ty = self.typecheck_statement(stmt, &mut if_block_env)?;
                 }
 
                 if else_block.is_some() {
                     for stmt in else_block.as_mut().unwrap().iter_mut() {
-                        self.typecheck_statement(stmt, &mut else_block_env)?;
+                        else_expr_ty = self.typecheck_statement(stmt, &mut else_block_env)?;
                     }
                 }
+
+                if if_expr_ty != else_expr_ty {
+                    return Err(format!("If and else block return mismatched types.\nIf block -> {}\nElse block -> {}", if_expr_ty.to_str(), else_expr_ty.to_str()));
+                }
+
+                expr.ty = if_expr_ty.clone();
             }
         }
         Ok(())
