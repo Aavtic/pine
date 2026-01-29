@@ -141,7 +141,7 @@ This is useful for:
 
 ---
 
-## 🧠 Type System Overview
+## Type System Overview
 
 * Primitive types:
 
@@ -165,7 +165,7 @@ fn mul(a: i32, b: i32, c: i32) -> i32 {
 
 ---
 
-## 🧪 Example Program
+## Example Program
 
 ```pine
 fn main() -> i32 {
