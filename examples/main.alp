@@ -1,7 +1,2 @@
 fn main(){
-    if 1 < 2 {
-        return 69
-    } else {
-        return 67
-    }
 }
