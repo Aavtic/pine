@@ -1,20 +1,19 @@
-fn add(a: i32, b: i32) -> i32 {
-    return a + b
-}
-
-fn mul(a: i32, b: i32) -> i32 {
-    return a * b
-}
-
-fn main(){
-    let a = 10
-    let b = 20
-    let isAdd = 0
-    let res = if isAdd == 1 {
-        add(a, b)
+fn get_grade(grade: i32) -> i32 {
+    return if grade >= 90 {
+        10
     } else {
-        mul(a, b)
+        if grade >= 75 {
+            9
+        } else {
+            if grade >= 65 {
+                8
+            } else {
+                0
+            }
+        }
     }
+}
 
-    return res
+fn main() {
+    return get_grade(75)
 }

@@ -326,7 +326,11 @@ impl Parser {
             let condition = self.expression()?;
             let if_block = self.block_expression()?;
             let else_block = if matches_token!(self, TokenType::Else) {
-                Some(self.block_expression()?)
+                if self.check(TokenType::If) {
+                    Some(vec![ast::Statement::Expr(ast::TypedExpr::unknown(self.if_expression()?))])
+                } else {
+                    Some(self.block_expression()?)
+                }
             } else {
                 None
             };

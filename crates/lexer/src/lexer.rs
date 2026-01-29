@@ -210,7 +210,7 @@ impl Tokenizer {
     }
 
     fn add_token_identifier(&mut self) {
-        while !self.is_end() && self.peek().is_alphanumeric() {
+        while !self.is_end() && (self.peek().is_alphanumeric() || self.peek() == '_') {
             self.advance();
         }
 
@@ -324,7 +324,7 @@ impl Tokenizer {
             _ => {
                 if c.is_numeric() {
                     self.add_token_number();
-                } else if c.is_alphabetic() {
+                } else if c.is_alphabetic() || c == '_' {
                     self.add_token_identifier();
                 } else {
                     self.raise_error(LexError::SyntaxError(
