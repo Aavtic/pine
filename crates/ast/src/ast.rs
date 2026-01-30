@@ -145,6 +145,7 @@ impl From<TokenType> for BinaryOp {
             TokenType::Minus => BinaryOp::Minus,
             TokenType::Star => BinaryOp::Star,
             TokenType::Slash => BinaryOp::Slash,
+            TokenType::Mod  => BinaryOp::Mod,
             TokenType::EqualEqual => BinaryOp::EqualEqual,
             TokenType::BangEqual => BinaryOp::NotEqual,
             TokenType::Greater => BinaryOp::Greater,
