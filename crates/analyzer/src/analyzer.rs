@@ -69,7 +69,7 @@ impl Analyzer {
                 }
 
                 // Look into this
-                return Ok(DataType::Void);
+                return Ok(DataType::Unit);
             }
 
             Statement::Return(ret_stmt) => {
@@ -91,7 +91,9 @@ impl Analyzer {
                 vardecl.data_type = Some(var_type.clone());
 
                 env.insert(vardecl.name.clone(), var_type.clone());
-                Ok(var_type)
+                // Ah, Uh..No variable decl must return unit
+                //Ok(var_type)
+                Ok(DataType::Unit)
             }
 
             Statement::Assignment(assign) => {
@@ -99,7 +101,9 @@ impl Analyzer {
 
                 if let Some(ty) = env.get(&assign.name) {
                     let _ = ty.unify(&assign.value.ty)?;
-                    return Ok(ty.clone());
+                    // Ah, Uh..No variable decl must return unit
+                    //return Ok(ty.clone());
+                    return Ok(DataType::Unit)
                 } else {
                     // TODO: Pass the line, col here
                     return Err(format!(
@@ -171,7 +175,7 @@ impl Analyzer {
                 self.typecheck_expr(right, env)?;
 
                 match op {
-                    BinaryOp::Plus | BinaryOp::Minus | BinaryOp::Star | BinaryOp::Slash => {
+                    BinaryOp::Plus | BinaryOp::Minus | BinaryOp::Star | BinaryOp::Slash | BinaryOp::Mod => {
                         if left.ty != DataType::I32 || right.ty != DataType::I32 {
                             return Err(format!(
                                 "Binary Operation requires int operands, got {} and {}",
@@ -270,6 +274,35 @@ impl Analyzer {
                 }
 
                 expr.ty = if_expr_ty.clone();
+            }
+
+            Expr::While {
+                condition,
+                body,
+            } => {
+                // Typecheck the condition
+                self.typecheck_expr(condition, env)?;
+
+                // Verify that it resolves to boolean
+                if condition.ty != DataType::Boolean {
+                    return Err(format!("Only Expressions resolving to a boolean is allowed in while condition"));
+                }
+
+                let mut local_env = env.clone();
+                let mut while_type = DataType::Unit;
+
+                for stmt in body.iter_mut() {
+                    // Ignore return statement as they are terminals and they can return out of
+                    // this scope
+                    match stmt {
+                        Statement::Return(_) => {}
+                        _ => while_type = self.typecheck_statement(stmt, &mut local_env)?
+                    }
+                }
+
+                if while_type != DataType::Unit {
+                    return Err(format!("Expected {} but got {}\nWhile loop cannot return any value", DataType::Unit.to_str(), while_type.to_str()));
+                }
             }
         }
         Ok(())
