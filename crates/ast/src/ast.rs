@@ -93,6 +93,11 @@ pub enum Expr {
         condition: Box<TypedExpr>,
         if_block: Vec<Statement>,
         else_block: Option<Vec<Statement>>,
+    },
+
+    While {
+        condition: Box<TypedExpr>,
+        body: Vec<Statement>,
     }
 }
 
@@ -125,7 +130,7 @@ impl From<TokenType> for UnaryOp {
 #[derive(Debug, Clone)]
 pub enum BinaryOp {
     Plus, Minus,
-    Star, Slash,
+    Star, Slash, Mod,
 
     EqualEqual, NotEqual,
     Greater, GreaterEqual,
@@ -175,6 +180,7 @@ impl BinaryOp {
 					  BinaryOp::Minus => "Binary\n-",
             BinaryOp::Star => "Binary\n*",
 					  BinaryOp::Slash => "Binary\n/",
+            BinaryOp::Mod => "Binary\n%",
 
             BinaryOp::EqualEqual => "Binary\n==",
 					  BinaryOp::NotEqual => "Binary\n!=",
@@ -191,6 +197,7 @@ impl BinaryOp {
 					  BinaryOp::Minus => "-",
             BinaryOp::Star => "*",
 					  BinaryOp::Slash => "/",
+            BinaryOp::Mod   => "%",
 
             BinaryOp::EqualEqual => "==",
 					  BinaryOp::NotEqual => "!=",
@@ -223,6 +230,7 @@ impl Expr {
             Expr::Variable{..} =>               "Variable",
             Expr::FunctionCall{..} =>           "Function call",
             Expr::If{..} =>                     "if",
+            Expr::While{..} =>                  "while",
         }
     }
 }

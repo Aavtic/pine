@@ -7,6 +7,7 @@ pub enum DataType {
     U64,
     String,
     Void,
+    Unit,
     Boolean,
     Function {params: Vec<DataType>, ret_type: Box<DataType>},
     // For passing ast without type check
@@ -25,6 +26,7 @@ impl DataType {
             DataType::Boolean => "boolean",
             DataType::Function{..} => "function",
             DataType::Unknown => "unknown",
+            DataType::Unit => "unit",
         }
     }
 }
@@ -35,7 +37,8 @@ impl DataType {
             "u32" => DataType::U32,
             "u64" => DataType::U64,
             "i32" => DataType::I32,
-            "i64" => DataType::U64,
+            "i64" => DataType::I64,
+            "bool" => DataType::Boolean,
             _     => DataType::Unknown,
         }
     }

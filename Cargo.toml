@@ -3,8 +3,8 @@ members = [
     "crates/lexer",
     "crates/parser",
     "crates/ast",
+    "crates/ir",
     "crates/analyzer",
     "crates/codegen",
-    "crates/ir",
     "tools/pinec", "crates/utils", "crates/linker",
 ]

@@ -318,7 +318,20 @@ impl Parser {
     }
 
     fn expression(&mut self) -> Result<ast::TypedExpr, ParseError> {
-        return Ok(ast::TypedExpr::unknown(self.if_expression()?));
+        return Ok(ast::TypedExpr::unknown(self.while_expression()?));
+    }
+
+    fn while_expression(&mut self) -> Result<ast::Expr, ParseError> {
+        if matches_token!(self, TokenType::While) {
+            let condition = self.expression()?;
+            let body = self.block_expression()?;
+            return Ok(ast::Expr::While{
+                condition: Box::new(condition),
+                body,
+            })
+        } else {
+            return self.if_expression();
+        }
     }
 
     fn if_expression(&mut self) -> Result<ast::Expr, ParseError> {
@@ -454,7 +467,7 @@ impl Parser {
             return expr;
         };
 
-        while matches_token!(self, TokenType::Slash, TokenType::Star) {
+        while matches_token!(self, TokenType::Slash, TokenType::Star, TokenType::Mod) {
             let operator = self.previous();
             let right = self.unary();
 

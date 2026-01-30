@@ -1,19 +1,10 @@
-fn get_grade(grade: i32) -> i32 {
-    return if grade >= 90 {
-        10
+fn is_even(n: i32) -> bool {
+    if n % 2 == 0 {
+        return true
     } else {
-        if grade >= 75 {
-            9
-        } else {
-            if grade >= 65 {
-                8
-            } else {
-                0
-            }
-        }
+        return false
     }
 }
 
 fn main() {
-    return get_grade(75)
 }

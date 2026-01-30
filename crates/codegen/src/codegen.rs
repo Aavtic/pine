@@ -319,6 +319,7 @@ impl<'ctx> CodeGen<'ctx> {
                     BinaryOp::Minus => return Ok(self.builder.build_int_sub(l, r, "sub").unwrap()),
                     BinaryOp::Star => return Ok(self.builder.build_int_mul(l, r, "mul").unwrap()),
                     BinaryOp::Slash => return Ok(self.builder.build_int_signed_div(l, r, "div").unwrap()),
+                    BinaryOp::Mod   => return Ok(self.builder.build_int_signed_rem(l, r, "mod").unwrap()),
                     BinaryOp::Lesser => {
                         let cmp = self
                             .builder
@@ -496,6 +497,52 @@ impl<'ctx> CodeGen<'ctx> {
                     return Ok(phi.as_basic_value().into_int_value())
                 }
             }
+
+            Expr::While {
+                condition,
+                body
+            } => {
+                let function = self.current_fn.as_ref().unwrap();
+                let cond_bb = self.context.append_basic_block(function.value, "while_cond");
+                let body_bb = self.context.append_basic_block(function.value, "while_body");
+                let end_bb = self.context.append_basic_block(function.value, "while_end");
+
+                self.builder.build_unconditional_branch(cond_bb).unwrap();
+
+                self.builder.position_at_end(cond_bb);
+
+                let cond_value = self.compile_expression(condition.expr.clone(), Some(condition.ty))?;
+                let cond_bool = self
+                    .builder
+                    .build_int_truncate(cond_value, self.context.bool_type(), "cond")
+                    .unwrap();
+
+                self.builder
+                    .build_conditional_branch(cond_bool, body_bb, end_bb)
+                    .unwrap();
+
+                self.builder
+                    .position_at_end(body_bb);
+
+                for stmt in body {
+                    self.compile_statement(&stmt, None)?;
+                }
+
+                // Check if there are any terminators at the end of the while block
+                // if not then unconditionally go to the condition to continue the loop
+                if self.builder
+                    .get_insert_block()
+                    .unwrap()
+                    .get_terminator()
+                    .is_none() {
+                        self.builder
+                            .build_unconditional_branch(cond_bb).unwrap();
+                }
+
+                // End
+                self.builder.position_at_end(end_bb);
+                Ok(self.context.i64_type().const_int(0, false))
+            }
         }
     }
 
@@ -504,6 +551,11 @@ impl<'ctx> CodeGen<'ctx> {
         value: Literal,
         _expected: Option<DataType>,
     ) -> (DataType, BasicValueEnum<'ctx>) {
+
+        while if 1 > 0 { true } else { false } {
+            println!("hello there!");
+        }
+
         todo!();
     }
 
@@ -594,6 +646,7 @@ impl<'ctx> CodeGen<'ctx> {
             DataType::I64 => Ok(self.context.i64_type()),
             DataType::U32 => Ok(self.context.i32_type()),
             DataType::U64 => Ok(self.context.i32_type()),
+            DataType::Boolean => Ok(self.context.bool_type()),
             _ => unimplemented!("{}", format!("{} is not implemented", typ.to_str())),
         }
     }
