@@ -1,6 +1,6 @@
 # 🌲 The Pine Programming Language
 
-Pine is a **statically typed, compiled programming language** designed for learning, experimentation, and building a clean understanding of how compilers work. It features a simple syntax, first-class functions, and a clear compilation pipeline that exposes each stage—from tokenization to LLVM IR generation.
+Pine is a **statically typed, compiled programming language** designed for learning, experimentation, and building a clean understanding of how compilers work. It features a simple syntax, first-class functions, and a clear compilation pipeline that exposes each stage from tokenization to LLVM IR generation.
 
 This project includes a CLI compiler called **`pinec`**, which can build, analyze, and run Pine programs.
 
