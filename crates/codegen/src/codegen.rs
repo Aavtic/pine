@@ -201,7 +201,7 @@ impl<'ctx> CodeGen<'ctx> {
 
             Statement::VariableDeclaration(vardecl) => {
                 let expr = vardecl.clone().value;
-                let val = self.compile_expression(expr.expr, Some(expr.ty))?;
+                let val = self.compile_expression(expr.expr, vardecl.data_type.clone())?;
 
                 if let Some(variable) = self.variables.get(&vardecl.name) {
                     self.builder.build_store(variable.ptr, val).unwrap();
@@ -293,50 +293,58 @@ impl<'ctx> CodeGen<'ctx> {
         match expression {
             Expr::Literal(lit) => match lit {
                 Literal::Number(n) => {
-                    if expected.is_none() { unreachable!() }
-                    return Ok(
-                        match expected.unwrap() {
-                            DataType::I32 => self
-                                    .context
-                                    .i32_type()
-                                    .const_int(n as u64, true)
-                                    .as_basic_value_enum(),
+                    if expected.is_none() {
+                        unreachable!()
+                    }
+                    return Ok(match expected.unwrap() {
+                        DataType::I32 => self
+                            .context
+                            .i32_type()
+                            .const_int(n as u64, true)
+                            .as_basic_value_enum(),
 
-                            DataType::I64 => self
-                                    .context
-                                    .i64_type()
-                                    .const_int(n as u64, true)
-                                    .as_basic_value_enum(),
+                        DataType::I64 => self
+                            .context
+                            .i64_type()
+                            .const_int(n as u64, true)
+                            .as_basic_value_enum(),
 
-                            DataType::U32 => self
-                                    .context
-                                    .i32_type()
-                                    .const_int(n as u64, false)
-                                    .as_basic_value_enum(),
+                        DataType::U32 => self
+                            .context
+                            .i32_type()
+                            .const_int(n as u64, false)
+                            .as_basic_value_enum(),
 
-                            DataType::U64 => self
-                                    .context
-                                    .i32_type()
-                                    .const_int(n as u64, false)
-                                    .as_basic_value_enum(),
-
-                            DataType::F32 => self
-                                    .context
-                                    .i32_type()
-                                    .const_int(n as u64, false)
-                                    .as_basic_value_enum(),
-
-                            DataType::F64=> self
-                                    .context
-                                    .i32_type()
-                                    .const_int(n as u64, false)
-                                    .as_basic_value_enum(),
-                            _ => unreachable!(),
-                        }
-                        );
+                        DataType::U64 => self
+                            .context
+                            .i32_type()
+                            .const_int(n as u64, false)
+                            .as_basic_value_enum(),
+                        _ => unreachable!(),
+                    });
                 }
                 Literal::Float(n) => {
-                    return Ok(self.context.f32_type().const_float(n).as_basic_value_enum());
+                    if expected.is_none() {
+                        return Ok(self
+                            .context
+                            .f64_type()
+                            .const_float(n as f64)
+                            .as_basic_value_enum());
+                    }
+                    return Ok(match expected.unwrap() {
+                        DataType::F32 => self
+                            .context
+                            .f32_type()
+                            .const_float(n as f64)
+                            .as_basic_value_enum(),
+
+                        DataType::F64 => self
+                            .context
+                            .f64_type()
+                            .const_float(n as f64)
+                            .as_basic_value_enum(),
+                        _ => unreachable!(),
+                    });
                 }
                 Literal::Boolean(b) => Ok(self
                     .context
@@ -1340,9 +1348,6 @@ impl<'ctx> CodeGen<'ctx> {
         value: Literal,
         _expected: Option<DataType>,
     ) -> (DataType, BasicValueEnum<'ctx>) {
-        while if 1 > 0 { true } else { false } {
-            println!("hello there!");
-        }
 
         todo!();
     }
