@@ -39,13 +39,9 @@ struct BuildArgs {
 #[derive(Subcommand, Debug)]
 enum BuildMode {
     /// Build the AST and write it as a DOT graph
-    // Feature needs to be build
-    //Ast {
-    //    /// Output DOT file
-    //    //output: PathBuf,
-    //},
-    Ast,
     Tokens,
+    Ast,
+    Analyze,
     LlvmIr,
 }
 
@@ -59,14 +55,17 @@ fn main() {
                     // alpherac build -s main.alp
                     compile_program(build.source_file);
                 }
+                Some(BuildMode::Tokens) => {
+                    print_tokens(build.source_file);
+                }
                 Some(BuildMode::Ast) => {
                     // alpherac build ast -s main.alp output.dot
                     //print_ast_to_dot(build.source_file, output);
                     //alpherac build ast
                     build_ast(build.source_file)
                 }
-                Some(BuildMode::Tokens) => {
-                    print_tokens(build.source_file);
+                Some(BuildMode::Analyze) => {
+                    build_analyze(build.source_file)
                 }
                 Some(BuildMode::LlvmIr) => {
                     build_llvm_ir(build.source_file)
@@ -104,6 +103,21 @@ fn build_ast(source: PathBuf) {
             eprintln!("{}", err);
         }
     }
+}
+
+fn build_analyze(file: PathBuf) {
+    let source = handle_reading_file(&file);
+    let tokens = lex(source.as_str());
+    let mut parser = Parser::new(tokens);
+    let mut ast = parser.parse().unwrap_or_else(|err| panic!("Couldn't parse the program due to: \n{}", err));
+
+    let analyzer = Analyzer::new();
+    if let Err(err) = analyzer.analyze(&mut ast) {
+        eprintln!("Type Check failed due to:\n{}", err);
+        return
+    }
+
+    println!("{:#?}", ast)
 }
 
 fn build_llvm_ir(file: PathBuf) {
