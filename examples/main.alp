@@ -1,4 +1,12 @@
+fn is_even(n: i32) -> bool {
+    return n % 2 == 0
+}
+
+fn is_odd(n: i32) -> bool {
+    return n % 2 != 0
+}
+
 fn main() {
-    let a = true && (true && !false);
-    return if a { 1 } else { 0 } 
+    let n = 69
+    return if is_odd(n) { 1 } else { 0 }
 }
