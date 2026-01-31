@@ -197,9 +197,13 @@ impl Analyzer {
                     | BinaryOp::Greater
                     | BinaryOp::LesserEqual
                     | BinaryOp::GreaterEqual => {
-                        if left.ty != DataType::I32 || right.ty != DataType::I32 {
+                        if !((left.ty == DataType::I32 && right.ty == DataType::I32) || 
+                            (left.ty == DataType::I64 && right.ty == DataType::I64) ||
+                            (left.ty == DataType::F32 && right.ty == DataType::F32) ||
+                            (left.ty == DataType::F64 && right.ty == DataType::F64)
+                            ) {
                             return Err(format!(
-                                "Comparision requires int operands got {} and {}",
+                                "Invalid comparison operands. got {} and {}",
                                 left.ty.to_str(),
                                 right.ty.to_str()
                             ));

@@ -1038,6 +1038,16 @@ impl<'ctx> CodeGen<'ctx> {
                                 )
                                 .unwrap(),
 
+                            DataType::Boolean => self
+                                .builder
+                                .build_int_compare(
+                                    IntPredicate::EQ,
+                                    l.into_int_value(),
+                                    r.into_int_value(),
+                                    "eq",
+                                )
+                                .unwrap(),
+
                             _ => unimplemented!(),
                         };
 
