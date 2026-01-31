@@ -242,17 +242,16 @@ impl<'ctx> CodeGen<'ctx> {
             }
 
             Statement::Assignment(assign) => {
-                let compiled_value = self
-                    .compile_expression(assign.value.expr.clone(), Some(assign.value.ty.clone()))
-                    .unwrap();
-                if let Some(variable) = self.variables.get(&assign.name) {
+                if let Some(variable) = self.variables.clone().get(&assign.name) {
+                    let compiled_value = self
+                        .compile_expression(assign.value.expr.clone(), Some(variable.datatype.clone()))
+                        .unwrap();
                     self.builder
                         .build_store(variable.ptr, compiled_value)
                         .unwrap();
                 } else {
-                    panic!("Variable not defined!, This is unreachable");
+                    panic!("{}", format!("assignment to undefined variable: {}", assign.name.clone()));
                 }
-
                 //Ok(Some(compiled_value.into_int_value()))
                 return Ok(None);
             }
