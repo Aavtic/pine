@@ -168,11 +168,11 @@ fn mul(a: i32, b: i32, c: i32) -> i32 {
 ## Example Program
 
 ```pine
-fn main() -> i32 {
-    let sum: i32 = add(10, 20);
-    let diff: i32 = sub(40, 10);
-    let prod: i32 = mul(1, 2, 3);
-    let quo: i32 = div(8, 4);
+fn main() {
+    let sum = add(10, 20);
+    let diff = sub(40, 10);
+    let prod = mul(1, 2, 3);
+    let quo = div(8, 4);
     return sum + diff + prod + quo;
 }
 ```
