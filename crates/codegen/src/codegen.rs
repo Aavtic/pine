@@ -5,8 +5,7 @@ use crate::{function::Function, variable::Variable};
 use ast::{DataType, Expr, Literal, Statement};
 
 use inkwell::{
-    IntPredicate,
-    AddressSpace,
+    AddressSpace, FloatPredicate, IntPredicate,
     basic_block::BasicBlock,
     builder::Builder,
     context::Context,
@@ -131,7 +130,7 @@ impl<'ctx> CodeGen<'ctx> {
         &mut self,
         statement: &Statement,
         prefix: Option<String>,
-    ) -> Result<Option<IntValue<'ctx>>, String> {
+    ) -> Result<Option<BasicValueEnum<'ctx>>, String> {
         match statement {
             Statement::FunctionDefinition(fndef) => {
                 let fn_name = fndef.fn_name.clone();
@@ -225,25 +224,45 @@ impl<'ctx> CodeGen<'ctx> {
                     );
                 }
 
-                return Ok(Some(val));
+                // statements don't need to return except for return
+                return Ok(None);
+
+                //return Ok(Some(
+                //        match expr.ty {
+                //            DataType::I32 => val.into_int_value(),
+                //            DataType::I64 => val.into_int_value(),
+                //            DataType::U32 => val.into_int_value(),
+                //            DataType::U64 => val.into_int_value(),
+                //            DataType::F32 => val.into_float_value(),
+                //            DataType::F64 => val.into_float_value(),
+                //
+                //            _ => unimplemented!(),
+                //        }
+                //));
             }
 
             Statement::Assignment(assign) => {
-                let compiled_value = self.compile_expression(assign.value.expr.clone(), Some(assign.value.ty.clone())).unwrap();
+                let compiled_value = self
+                    .compile_expression(assign.value.expr.clone(), Some(assign.value.ty.clone()))
+                    .unwrap();
                 if let Some(variable) = self.variables.get(&assign.name) {
-                    self.builder.build_store(variable.ptr, compiled_value).unwrap();
+                    self.builder
+                        .build_store(variable.ptr, compiled_value)
+                        .unwrap();
                 } else {
                     panic!("Variable not defined!, This is unreachable");
                 }
 
-                Ok(Some(compiled_value))
+                //Ok(Some(compiled_value.into_int_value()))
+                return Ok(None);
             }
 
             Statement::Return(ret_stmt) => {
                 if let Some(expr) = &ret_stmt.value {
-                    let value = self.compile_expression(expr.expr.clone(), Some(expr.ty.clone()))?;
+                    let value =
+                        self.compile_expression(expr.expr.clone(), Some(expr.ty.clone()))?;
                     self.builder.build_return(Some(&value)).unwrap();
-                    return Ok(Some(value));
+                    return Ok(Some(value.as_basic_value_enum()));
                 } else {
                     let function = self.current_fn.clone().unwrap();
                     if function.datatype != DataType::Void {
@@ -260,7 +279,7 @@ impl<'ctx> CodeGen<'ctx> {
 
             Statement::Expr(expr) => {
                 let value = self.compile_expression(expr.expr.clone(), Some(expr.ty.clone()))?;
-                return Ok(Some(value))
+                return Ok(Some(value.as_basic_value_enum()));
             }
         }
     }
@@ -269,18 +288,65 @@ impl<'ctx> CodeGen<'ctx> {
         &mut self,
         expression: Expr,
         expected: Option<DataType>,
-    ) -> Result<IntValue<'ctx>, String> {
+    ) -> Result<BasicValueEnum<'ctx>, String> {
         // Todo : Check expected
         match expression {
             Expr::Literal(lit) => match lit {
                 Literal::Number(n) => {
-                    return Ok(self.context.i32_type().const_int(n as u64, false));
+                    if expected.is_none() { unreachable!() }
+                    return Ok(
+                        match expected.unwrap() {
+                            DataType::I32 => self
+                                    .context
+                                    .i32_type()
+                                    .const_int(n as u64, true)
+                                    .as_basic_value_enum(),
+
+                            DataType::I64 => self
+                                    .context
+                                    .i64_type()
+                                    .const_int(n as u64, true)
+                                    .as_basic_value_enum(),
+
+                            DataType::U32 => self
+                                    .context
+                                    .i32_type()
+                                    .const_int(n as u64, false)
+                                    .as_basic_value_enum(),
+
+                            DataType::U64 => self
+                                    .context
+                                    .i32_type()
+                                    .const_int(n as u64, false)
+                                    .as_basic_value_enum(),
+
+                            DataType::F32 => self
+                                    .context
+                                    .i32_type()
+                                    .const_int(n as u64, false)
+                                    .as_basic_value_enum(),
+
+                            DataType::F64=> self
+                                    .context
+                                    .i32_type()
+                                    .const_int(n as u64, false)
+                                    .as_basic_value_enum(),
+                            _ => unreachable!(),
+                        }
+                        );
                 }
-                Literal::Boolean(b) => Ok(self.context.bool_type().const_int(b as u64, false)),
+                Literal::Float(n) => {
+                    return Ok(self.context.f32_type().const_float(n).as_basic_value_enum());
+                }
+                Literal::Boolean(b) => Ok(self
+                    .context
+                    .bool_type()
+                    .const_int(b as u64, false)
+                    .as_basic_value_enum()),
                 _ => unimplemented!(),
             },
 
-            Expr::Variable{name, ..} => {
+            Expr::Variable { name, .. } => {
                 let variable = self
                     .variables
                     .get(&name)
@@ -292,21 +358,33 @@ impl<'ctx> CodeGen<'ctx> {
 
                 // TODO:
                 // Return the corresponding type
-                Ok(val.into_int_value())
+                Ok(val.as_basic_value_enum())
             }
 
             Expr::Unary { op, right } => {
                 let val = self.compile_expression(right.expr, Some(right.ty))?;
 
                 match op {
-                    ast::UnaryOp::Bang => return Ok(self.builder.build_not(val, "not").unwrap()),
+                    ast::UnaryOp::Bang => {
+                        return Ok(self
+                            .builder
+                            .build_not(val.into_int_value(), "not")
+                            .unwrap()
+                            .as_basic_value_enum());
+                    }
                     ast::UnaryOp::Minus => {
-                        return Ok(self.builder.build_int_neg(val, "neg").unwrap());
+                        return Ok(self
+                            .builder
+                            .build_int_neg(val.into_int_value(), "neg")
+                            .unwrap()
+                            .as_basic_value_enum());
                     }
                 }
             }
 
             Expr::Binary { left, op, right } => {
+                let ty = left.ty.clone();
+
                 let l = self.compile_expression(left.expr, Some(left.ty))?;
                 let r = self.compile_expression(right.expr, Some(right.ty))?;
 
@@ -315,117 +393,816 @@ impl<'ctx> CodeGen<'ctx> {
                 match op {
                     // Sweet killer!
                     // Sweet!
-                    BinaryOp::Plus => return Ok(self.builder.build_int_add(l, r, "add").unwrap()),
-                    BinaryOp::Minus => return Ok(self.builder.build_int_sub(l, r, "sub").unwrap()),
-                    BinaryOp::Star => return Ok(self.builder.build_int_mul(l, r, "mul").unwrap()),
-                    BinaryOp::Slash => return Ok(self.builder.build_int_signed_div(l, r, "div").unwrap()),
-                    BinaryOp::Mod   => return Ok(self.builder.build_int_signed_rem(l, r, "mod").unwrap()),
-                    BinaryOp::Lesser => {
-                        let cmp = self
-                            .builder
-                            .build_int_compare(IntPredicate::SLT, l, r, "lt").unwrap();
-                        Ok(self
-                            .builder
-                            .build_int_z_extend(cmp, self.context.i64_type(), "ext")
-                            .unwrap())
+                    // TODO: This depends on type. check if it is float then act accordingly
+                    BinaryOp::Plus => {
+                        return Ok(match ty {
+                            DataType::I32 => self
+                                .builder
+                                .build_int_add(l.into_int_value(), r.into_int_value(), "add")
+                                .unwrap()
+                                .as_basic_value_enum(),
+                            DataType::I64 => self
+                                .builder
+                                .build_int_add(l.into_int_value(), r.into_int_value(), "add")
+                                .unwrap()
+                                .as_basic_value_enum(),
+                            DataType::U32 => self
+                                .builder
+                                .build_int_add(l.into_int_value(), r.into_int_value(), "add")
+                                .unwrap()
+                                .as_basic_value_enum(),
+                            DataType::U64 => self
+                                .builder
+                                .build_int_add(l.into_int_value(), r.into_int_value(), "add")
+                                .unwrap()
+                                .as_basic_value_enum(),
+                            DataType::F32 => self
+                                .builder
+                                .build_float_add(l.into_float_value(), r.into_float_value(), "add")
+                                .unwrap()
+                                .as_basic_value_enum(),
+                            DataType::F64 => self
+                                .builder
+                                .build_float_add(l.into_float_value(), r.into_float_value(), "add")
+                                .unwrap()
+                                .as_basic_value_enum(),
+
+                            _ => unimplemented!(),
+                        });
+                    }
+                    BinaryOp::Minus => {
+                        return Ok(match ty {
+                            DataType::I32 => self
+                                .builder
+                                .build_int_sub(l.into_int_value(), r.into_int_value(), "sub")
+                                .unwrap()
+                                .as_basic_value_enum(),
+                            DataType::I64 => self
+                                .builder
+                                .build_int_sub(l.into_int_value(), r.into_int_value(), "sub")
+                                .unwrap()
+                                .as_basic_value_enum(),
+                            DataType::U32 => self
+                                .builder
+                                .build_int_sub(l.into_int_value(), r.into_int_value(), "sub")
+                                .unwrap()
+                                .as_basic_value_enum(),
+                            DataType::U64 => self
+                                .builder
+                                .build_int_sub(l.into_int_value(), r.into_int_value(), "sub")
+                                .unwrap()
+                                .as_basic_value_enum(),
+                            DataType::F32 => self
+                                .builder
+                                .build_float_sub(l.into_float_value(), r.into_float_value(), "sub")
+                                .unwrap()
+                                .as_basic_value_enum(),
+                            DataType::F64 => self
+                                .builder
+                                .build_float_sub(l.into_float_value(), r.into_float_value(), "sub")
+                                .unwrap()
+                                .as_basic_value_enum(),
+
+                            _ => unimplemented!(),
+                        });
+                    }
+                    BinaryOp::Star => {
+                        return Ok(match ty {
+                            DataType::I32 => self
+                                .builder
+                                .build_int_mul(l.into_int_value(), r.into_int_value(), "mul")
+                                .unwrap()
+                                .as_basic_value_enum(),
+                            DataType::I64 => self
+                                .builder
+                                .build_int_mul(l.into_int_value(), r.into_int_value(), "mul")
+                                .unwrap()
+                                .as_basic_value_enum(),
+                            DataType::U32 => self
+                                .builder
+                                .build_int_mul(l.into_int_value(), r.into_int_value(), "mul")
+                                .unwrap()
+                                .as_basic_value_enum(),
+                            DataType::U64 => self
+                                .builder
+                                .build_int_mul(l.into_int_value(), r.into_int_value(), "mul")
+                                .unwrap()
+                                .as_basic_value_enum(),
+                            DataType::F32 => self
+                                .builder
+                                .build_float_mul(l.into_float_value(), r.into_float_value(), "mul")
+                                .unwrap()
+                                .as_basic_value_enum(),
+                            DataType::F64 => self
+                                .builder
+                                .build_float_mul(l.into_float_value(), r.into_float_value(), "mul")
+                                .unwrap()
+                                .as_basic_value_enum(),
+
+                            _ => unimplemented!(),
+                        });
+                    }
+                    BinaryOp::Slash => {
+                        return Ok(match ty {
+                            DataType::I32 => self
+                                .builder
+                                .build_int_signed_div(l.into_int_value(), r.into_int_value(), "div")
+                                .unwrap()
+                                .as_basic_value_enum(),
+                            DataType::I64 => self
+                                .builder
+                                .build_int_signed_div(l.into_int_value(), r.into_int_value(), "div")
+                                .unwrap()
+                                .as_basic_value_enum(),
+                            DataType::U32 => self
+                                .builder
+                                .build_int_signed_div(l.into_int_value(), r.into_int_value(), "div")
+                                .unwrap()
+                                .as_basic_value_enum(),
+                            DataType::U64 => self
+                                .builder
+                                .build_int_signed_div(l.into_int_value(), r.into_int_value(), "div")
+                                .unwrap()
+                                .as_basic_value_enum(),
+                            DataType::F32 => self
+                                .builder
+                                .build_float_div(l.into_float_value(), r.into_float_value(), "div")
+                                .unwrap()
+                                .as_basic_value_enum(),
+                            DataType::F64 => self
+                                .builder
+                                .build_float_div(l.into_float_value(), r.into_float_value(), "div")
+                                .unwrap()
+                                .as_basic_value_enum(),
+
+                            _ => unimplemented!(),
+                        });
+                    }
+                    BinaryOp::Mod => {
+                        return Ok(match ty {
+                            DataType::I32 => self
+                                .builder
+                                .build_int_signed_rem(l.into_int_value(), r.into_int_value(), "mod")
+                                .unwrap()
+                                .as_basic_value_enum(),
+                            DataType::I64 => self
+                                .builder
+                                .build_int_signed_rem(l.into_int_value(), r.into_int_value(), "mod")
+                                .unwrap()
+                                .as_basic_value_enum(),
+                            DataType::U32 => self
+                                .builder
+                                .build_int_signed_rem(l.into_int_value(), r.into_int_value(), "mod")
+                                .unwrap()
+                                .as_basic_value_enum(),
+                            DataType::U64 => self
+                                .builder
+                                .build_int_signed_rem(l.into_int_value(), r.into_int_value(), "mod")
+                                .unwrap()
+                                .as_basic_value_enum(),
+                            DataType::F32 => self
+                                .builder
+                                .build_float_rem(l.into_float_value(), r.into_float_value(), "mod")
+                                .unwrap()
+                                .as_basic_value_enum(),
+                            DataType::F64 => self
+                                .builder
+                                .build_float_rem(l.into_float_value(), r.into_float_value(), "mod")
+                                .unwrap()
+                                .as_basic_value_enum(),
+
+                            _ => unimplemented!(),
+                        });
+                    }
+                    BinaryOp::Lesser => match ty {
+                        DataType::I32 => {
+                            let cmp = self
+                                .builder
+                                .build_int_compare(
+                                    IntPredicate::SLT,
+                                    l.into_int_value(),
+                                    r.into_int_value(),
+                                    "lt",
+                                )
+                                .unwrap();
+                            Ok(self
+                                .builder
+                                .build_int_z_extend(cmp, self.context.i64_type(), "ext")
+                                .unwrap()
+                                .as_basic_value_enum())
+                        }
+                        DataType::I64 => {
+                            let cmp = self
+                                .builder
+                                .build_int_compare(
+                                    IntPredicate::SLT,
+                                    l.into_int_value(),
+                                    r.into_int_value(),
+                                    "lt",
+                                )
+                                .unwrap();
+                            Ok(self
+                                .builder
+                                .build_int_z_extend(cmp, self.context.i64_type(), "ext")
+                                .unwrap()
+                                .as_basic_value_enum())
+                        }
+                        DataType::U32 => {
+                            let cmp = self
+                                .builder
+                                .build_int_compare(
+                                    IntPredicate::SLT,
+                                    l.into_int_value(),
+                                    r.into_int_value(),
+                                    "lt",
+                                )
+                                .unwrap();
+                            Ok(self
+                                .builder
+                                .build_int_z_extend(cmp, self.context.i64_type(), "ext")
+                                .unwrap()
+                                .as_basic_value_enum())
+                        }
+                        DataType::U64 => {
+                            let cmp = self
+                                .builder
+                                .build_int_compare(
+                                    IntPredicate::SLT,
+                                    l.into_int_value(),
+                                    r.into_int_value(),
+                                    "lt",
+                                )
+                                .unwrap();
+                            Ok(self
+                                .builder
+                                .build_int_z_extend(cmp, self.context.i64_type(), "ext")
+                                .unwrap()
+                                .as_basic_value_enum())
+                        }
+                        DataType::F32 => {
+                            let cmp = self
+                                .builder
+                                .build_float_compare(
+                                    FloatPredicate::OLT,
+                                    l.into_float_value(),
+                                    r.into_float_value(),
+                                    "lt",
+                                )
+                                .unwrap();
+                            Ok(self
+                                .builder
+                                .build_int_z_extend(cmp, self.context.i64_type(), "ext")
+                                .unwrap()
+                                .as_basic_value_enum())
+                        }
+                        DataType::F64 => {
+                            let cmp = self
+                                .builder
+                                .build_float_compare(
+                                    FloatPredicate::OLT,
+                                    l.into_float_value(),
+                                    r.into_float_value(),
+                                    "lt",
+                                )
+                                .unwrap();
+                            Ok(self
+                                .builder
+                                .build_int_z_extend(cmp, self.context.i64_type(), "ext")
+                                .unwrap()
+                                .as_basic_value_enum())
+                        }
+
+                        _ => unimplemented!(),
                     },
-                    BinaryOp::Greater => {
-                        let cmp = self
-                            .builder
-                            .build_int_compare(IntPredicate::SGT, l, r, "gt").unwrap();
+                    BinaryOp::Greater => match ty {
+                        DataType::I32 => {
+                            let cmp = self
+                                .builder
+                                .build_int_compare(
+                                    IntPredicate::SGT,
+                                    l.into_int_value(),
+                                    r.into_int_value(),
+                                    "gt",
+                                )
+                                .unwrap();
+                            Ok(self
+                                .builder
+                                .build_int_z_extend(cmp, self.context.i64_type(), "ext")
+                                .unwrap()
+                                .as_basic_value_enum())
+                        }
+                        DataType::I64 => {
+                            let cmp = self
+                                .builder
+                                .build_int_compare(
+                                    IntPredicate::SGT,
+                                    l.into_int_value(),
+                                    r.into_int_value(),
+                                    "gt",
+                                )
+                                .unwrap();
+                            Ok(self
+                                .builder
+                                .build_int_z_extend(cmp, self.context.i64_type(), "ext")
+                                .unwrap()
+                                .as_basic_value_enum())
+                        }
+                        DataType::U32 => {
+                            let cmp = self
+                                .builder
+                                .build_int_compare(
+                                    IntPredicate::SGT,
+                                    l.into_int_value(),
+                                    r.into_int_value(),
+                                    "gt",
+                                )
+                                .unwrap();
+                            Ok(self
+                                .builder
+                                .build_int_z_extend(cmp, self.context.i64_type(), "ext")
+                                .unwrap()
+                                .as_basic_value_enum())
+                        }
+                        DataType::U64 => {
+                            let cmp = self
+                                .builder
+                                .build_int_compare(
+                                    IntPredicate::SGT,
+                                    l.into_int_value(),
+                                    r.into_int_value(),
+                                    "gt",
+                                )
+                                .unwrap();
+                            Ok(self
+                                .builder
+                                .build_int_z_extend(cmp, self.context.i64_type(), "ext")
+                                .unwrap()
+                                .as_basic_value_enum())
+                        }
+                        DataType::F32 => {
+                            let cmp = self
+                                .builder
+                                .build_float_compare(
+                                    FloatPredicate::OGT,
+                                    l.into_float_value(),
+                                    r.into_float_value(),
+                                    "gt",
+                                )
+                                .unwrap();
+                            Ok(self
+                                .builder
+                                .build_int_z_extend(cmp, self.context.i64_type(), "ext")
+                                .unwrap()
+                                .as_basic_value_enum())
+                        }
+                        DataType::F64 => {
+                            let cmp = self
+                                .builder
+                                .build_float_compare(
+                                    FloatPredicate::OGT,
+                                    l.into_float_value(),
+                                    r.into_float_value(),
+                                    "gt",
+                                )
+                                .unwrap();
+                            Ok(self
+                                .builder
+                                .build_int_z_extend(cmp, self.context.i64_type(), "ext")
+                                .unwrap()
+                                .as_basic_value_enum())
+                        }
 
-                        Ok(self
-                            .builder
-                            .build_int_z_extend(cmp, self.context.i64_type(), "ext")
-                            .unwrap())
-                    }
-                    BinaryOp::LesserEqual => {
-                        let cmp = self
-                            .builder
-                            .build_int_compare(IntPredicate::SLE, l, r, "le").unwrap();
+                        _ => unimplemented!(),
+                    },
+                    BinaryOp::LesserEqual => match ty {
+                        DataType::I32 => {
+                            let cmp = self
+                                .builder
+                                .build_int_compare(
+                                    IntPredicate::SLE,
+                                    l.into_int_value(),
+                                    r.into_int_value(),
+                                    "le",
+                                )
+                                .unwrap();
+                            Ok(self
+                                .builder
+                                .build_int_z_extend(cmp, self.context.i64_type(), "ext")
+                                .unwrap()
+                                .as_basic_value_enum())
+                        }
+                        DataType::I64 => {
+                            let cmp = self
+                                .builder
+                                .build_int_compare(
+                                    IntPredicate::SLE,
+                                    l.into_int_value(),
+                                    r.into_int_value(),
+                                    "le",
+                                )
+                                .unwrap();
+                            Ok(self
+                                .builder
+                                .build_int_z_extend(cmp, self.context.i64_type(), "ext")
+                                .unwrap()
+                                .as_basic_value_enum())
+                        }
+                        DataType::U32 => {
+                            let cmp = self
+                                .builder
+                                .build_int_compare(
+                                    IntPredicate::SLE,
+                                    l.into_int_value(),
+                                    r.into_int_value(),
+                                    "le",
+                                )
+                                .unwrap();
+                            Ok(self
+                                .builder
+                                .build_int_z_extend(cmp, self.context.i64_type(), "ext")
+                                .unwrap()
+                                .as_basic_value_enum())
+                        }
+                        DataType::U64 => {
+                            let cmp = self
+                                .builder
+                                .build_int_compare(
+                                    IntPredicate::SLE,
+                                    l.into_int_value(),
+                                    r.into_int_value(),
+                                    "le",
+                                )
+                                .unwrap();
+                            Ok(self
+                                .builder
+                                .build_int_z_extend(cmp, self.context.i64_type(), "ext")
+                                .unwrap()
+                                .as_basic_value_enum())
+                        }
+                        DataType::F32 => {
+                            let cmp = self
+                                .builder
+                                .build_float_compare(
+                                    FloatPredicate::OLE,
+                                    l.into_float_value(),
+                                    r.into_float_value(),
+                                    "le",
+                                )
+                                .unwrap();
+                            Ok(self
+                                .builder
+                                .build_int_z_extend(cmp, self.context.i64_type(), "ext")
+                                .unwrap()
+                                .as_basic_value_enum())
+                        }
+                        DataType::F64 => {
+                            let cmp = self
+                                .builder
+                                .build_float_compare(
+                                    FloatPredicate::OLE,
+                                    l.into_float_value(),
+                                    r.into_float_value(),
+                                    "le",
+                                )
+                                .unwrap();
+                            Ok(self
+                                .builder
+                                .build_int_z_extend(cmp, self.context.i64_type(), "ext")
+                                .unwrap()
+                                .as_basic_value_enum())
+                        }
 
-                        Ok(self
-                            .builder
-                            .build_int_z_extend(cmp, self.context.i64_type(), "ext")
-                            .unwrap())
-                    }
-                    BinaryOp::GreaterEqual => {
-                        let cmp = self
-                            .builder
-                            .build_int_compare(IntPredicate::SGE, l, r, "ge").unwrap();
-                        Ok(self
-                            .builder
-                            .build_int_z_extend(cmp, self.context.i64_type(), "ext")
-                            .unwrap())
-                    }
+                        _ => unimplemented!(),
+                    },
+                    BinaryOp::GreaterEqual => match ty {
+                        DataType::I32 => {
+                            let cmp = self
+                                .builder
+                                .build_int_compare(
+                                    IntPredicate::SGT,
+                                    l.into_int_value(),
+                                    r.into_int_value(),
+                                    "ge",
+                                )
+                                .unwrap();
+                            Ok(self
+                                .builder
+                                .build_int_z_extend(cmp, self.context.i64_type(), "ext")
+                                .unwrap()
+                                .as_basic_value_enum())
+                        }
+                        DataType::I64 => {
+                            let cmp = self
+                                .builder
+                                .build_int_compare(
+                                    IntPredicate::SGT,
+                                    l.into_int_value(),
+                                    r.into_int_value(),
+                                    "ge",
+                                )
+                                .unwrap();
+                            Ok(self
+                                .builder
+                                .build_int_z_extend(cmp, self.context.i64_type(), "ext")
+                                .unwrap()
+                                .as_basic_value_enum())
+                        }
+                        DataType::U32 => {
+                            let cmp = self
+                                .builder
+                                .build_int_compare(
+                                    IntPredicate::SGT,
+                                    l.into_int_value(),
+                                    r.into_int_value(),
+                                    "ge",
+                                )
+                                .unwrap();
+                            Ok(self
+                                .builder
+                                .build_int_z_extend(cmp, self.context.i64_type(), "ext")
+                                .unwrap()
+                                .as_basic_value_enum())
+                        }
+                        DataType::U64 => {
+                            let cmp = self
+                                .builder
+                                .build_int_compare(
+                                    IntPredicate::SGT,
+                                    l.into_int_value(),
+                                    r.into_int_value(),
+                                    "ge",
+                                )
+                                .unwrap();
+                            Ok(self
+                                .builder
+                                .build_int_z_extend(cmp, self.context.i64_type(), "ext")
+                                .unwrap()
+                                .as_basic_value_enum())
+                        }
+                        DataType::F32 => {
+                            let cmp = self
+                                .builder
+                                .build_float_compare(
+                                    FloatPredicate::OGE,
+                                    l.into_float_value(),
+                                    r.into_float_value(),
+                                    "ge",
+                                )
+                                .unwrap();
+                            Ok(self
+                                .builder
+                                .build_int_z_extend(cmp, self.context.i64_type(), "ext")
+                                .unwrap()
+                                .as_basic_value_enum())
+                        }
+                        DataType::F64 => {
+                            let cmp = self
+                                .builder
+                                .build_float_compare(
+                                    FloatPredicate::OGE,
+                                    l.into_float_value(),
+                                    r.into_float_value(),
+                                    "ge",
+                                )
+                                .unwrap();
+                            Ok(self
+                                .builder
+                                .build_int_z_extend(cmp, self.context.i64_type(), "ext")
+                                .unwrap()
+                                .as_basic_value_enum())
+                        }
+
+                        _ => unimplemented!(),
+                    },
                     BinaryOp::EqualEqual => {
-                        let cmp = self
-                            .builder
-                            .build_int_compare(IntPredicate::EQ, l, r, "eq").unwrap();
+                        let cmp = match ty {
+                            DataType::I32 => self
+                                .builder
+                                .build_int_compare(
+                                    IntPredicate::EQ,
+                                    l.into_int_value(),
+                                    r.into_int_value(),
+                                    "eq",
+                                )
+                                .unwrap(),
+                            DataType::I64 => self
+                                .builder
+                                .build_int_compare(
+                                    IntPredicate::EQ,
+                                    l.into_int_value(),
+                                    r.into_int_value(),
+                                    "eq",
+                                )
+                                .unwrap(),
+                            DataType::U32 => self
+                                .builder
+                                .build_int_compare(
+                                    IntPredicate::EQ,
+                                    l.into_int_value(),
+                                    r.into_int_value(),
+                                    "eq",
+                                )
+                                .unwrap(),
+                            DataType::U64 => self
+                                .builder
+                                .build_int_compare(
+                                    IntPredicate::EQ,
+                                    l.into_int_value(),
+                                    r.into_int_value(),
+                                    "eq",
+                                )
+                                .unwrap(),
+                            DataType::F32 => self
+                                .builder
+                                .build_float_compare(
+                                    FloatPredicate::OEQ,
+                                    l.into_float_value(),
+                                    r.into_float_value(),
+                                    "eq",
+                                )
+                                .unwrap(),
+                            DataType::F64 => self
+                                .builder
+                                .build_float_compare(
+                                    FloatPredicate::OEQ,
+                                    l.into_float_value(),
+                                    r.into_float_value(),
+                                    "eq",
+                                )
+                                .unwrap(),
+
+                            _ => unimplemented!(),
+                        };
 
                         Ok(self
                             .builder
                             .build_int_z_extend(cmp, self.context.i64_type(), "ext")
-                            .unwrap())
+                            .unwrap()
+                            .as_basic_value_enum())
                     }
-                    BinaryOp::NotEqual => {
-                        let cmp = self
-                            .builder
-                            .build_int_compare(IntPredicate::NE, l, r, "ne").unwrap();
-                        Ok(self
-                            .builder
-                            .build_int_z_extend(cmp, self.context.i64_type(), "ext")
-                            .unwrap())
-                    }
+                    BinaryOp::NotEqual => match ty {
+                        DataType::I32 => {
+                            let cmp = self
+                                .builder
+                                .build_int_compare(
+                                    IntPredicate::NE,
+                                    l.into_int_value(),
+                                    r.into_int_value(),
+                                    "ne",
+                                )
+                                .unwrap();
+                            Ok(self
+                                .builder
+                                .build_int_z_extend(cmp, self.context.i64_type(), "ext")
+                                .unwrap()
+                                .as_basic_value_enum())
+                        }
+                        DataType::I64 => {
+                            let cmp = self
+                                .builder
+                                .build_int_compare(
+                                    IntPredicate::NE,
+                                    l.into_int_value(),
+                                    r.into_int_value(),
+                                    "ne",
+                                )
+                                .unwrap();
+                            Ok(self
+                                .builder
+                                .build_int_z_extend(cmp, self.context.i64_type(), "ext")
+                                .unwrap()
+                                .as_basic_value_enum())
+                        }
+                        DataType::U32 => {
+                            let cmp = self
+                                .builder
+                                .build_int_compare(
+                                    IntPredicate::NE,
+                                    l.into_int_value(),
+                                    r.into_int_value(),
+                                    "ne",
+                                )
+                                .unwrap();
+                            Ok(self
+                                .builder
+                                .build_int_z_extend(cmp, self.context.i64_type(), "ext")
+                                .unwrap()
+                                .as_basic_value_enum())
+                        }
+                        DataType::U64 => {
+                            let cmp = self
+                                .builder
+                                .build_int_compare(
+                                    IntPredicate::NE,
+                                    l.into_int_value(),
+                                    r.into_int_value(),
+                                    "ne",
+                                )
+                                .unwrap();
+                            Ok(self
+                                .builder
+                                .build_int_z_extend(cmp, self.context.i64_type(), "ext")
+                                .unwrap()
+                                .as_basic_value_enum())
+                        }
+                        DataType::F32 => {
+                            let cmp = self
+                                .builder
+                                .build_float_compare(
+                                    FloatPredicate::ONE,
+                                    l.into_float_value(),
+                                    r.into_float_value(),
+                                    "ne",
+                                )
+                                .unwrap();
+                            Ok(self
+                                .builder
+                                .build_int_z_extend(cmp, self.context.i64_type(), "ext")
+                                .unwrap()
+                                .as_basic_value_enum())
+                        }
+                        DataType::F64 => {
+                            let cmp = self
+                                .builder
+                                .build_float_compare(
+                                    FloatPredicate::ONE,
+                                    l.into_float_value(),
+                                    r.into_float_value(),
+                                    "ne",
+                                )
+                                .unwrap();
+                            Ok(self
+                                .builder
+                                .build_int_z_extend(cmp, self.context.i64_type(), "ext")
+                                .unwrap()
+                                .as_basic_value_enum())
+                        }
+
+                        _ => unimplemented!(),
+                    },
                 }
-
-            },
+            }
 
             Expr::Grouping(expr) => {
                 let value = self.compile_expression(expr.expr, Some(expr.ty))?;
                 return Ok(value);
             }
 
-            Expr::FunctionCall{callee, args, name} => {
+            Expr::FunctionCall { callee, args, name } => {
                 // TODO resolve callee
                 //let callee = self.compile_expression(callee.expr, Some(callee.ty))?;
 
-                let function = self.functions
+                let function = self
+                    .functions
                     .get(&name)
                     .cloned()
                     .ok_or_else(|| format!("Undefined function: {}", name))?;
 
                 let arg_values: Vec<BasicMetadataValueEnum> = args
                     .iter()
-                    .map(|a| self.compile_expression(a.expr.clone(), Some(a.ty.clone())).map(|v| v.into()))
+                    .map(|a| {
+                        self.compile_expression(a.expr.clone(), Some(a.ty.clone()))
+                            .map(|v| v.into())
+                    })
                     .collect::<Result<_, _>>()?;
 
-                let call = self.
-                    builder.
-                    build_call(function.value, &arg_values, "call")
+                let call = self
+                    .builder
+                    .build_call(function.value, &arg_values, "call")
                     .unwrap();
 
-                Ok(call.try_as_basic_value().unwrap_basic().into_int_value())
+                Ok(call
+                    .try_as_basic_value()
+                    .unwrap_basic()
+                    .into_int_value()
+                    .as_basic_value_enum())
             }
 
-            Expr::If{
+            Expr::If {
                 condition,
                 if_block,
                 else_block,
             } => {
-                let condition_val = self.compile_expression(condition.expr.clone(), Some(condition.ty.clone()))?;
+                let condition_val =
+                    self.compile_expression(condition.expr.clone(), Some(condition.ty.clone()))?;
                 // Build i1 for branching
                 let cond_bool = self
                     .builder
-                    .build_int_truncate(condition_val, self.context.bool_type(), "cond")
+                    .build_int_truncate(
+                        condition_val.into_int_value(),
+                        self.context.bool_type(),
+                        "cond",
+                    )
                     .unwrap();
-                
+
                 let function = self.current_fn.as_ref().unwrap();
                 let then_bb = self.context.append_basic_block(function.value, "then");
                 let else_bb = self.context.append_basic_block(function.value, "else");
                 let merge_bb = self.context.append_basic_block(function.value, "merge");
 
-                self.builder.build_conditional_branch(cond_bool, then_bb, else_bb).unwrap();
+                self.builder
+                    .build_conditional_branch(cond_bool, then_bb, else_bb)
+                    .unwrap();
 
                 // Then block
                 self.builder.position_at_end(then_bb);
@@ -433,7 +1210,8 @@ impl<'ctx> CodeGen<'ctx> {
 
                 for stmt in if_block {
                     if let Some(val) = self.compile_statement(&stmt, None)? {
-                        then_val = val;
+                        // Should be safe ig
+                        then_val = val.into_int_value();
                     }
                 }
 
@@ -452,7 +1230,7 @@ impl<'ctx> CodeGen<'ctx> {
                 if else_block.is_some() {
                     for stmt in else_block.unwrap() {
                         if let Some(val) = self.compile_statement(&stmt, None)? {
-                            else_val = val;
+                            else_val = val.into_int_value();
                         }
                     }
                 }
@@ -474,17 +1252,18 @@ impl<'ctx> CodeGen<'ctx> {
                         merge_bb.delete().unwrap();
                     }
                     // Return a dummy value - the actual return happened in the branches
-                    return Ok(self.context.i64_type().const_int(0, false))
+                    return Ok(self
+                        .context
+                        .i64_type()
+                        .const_int(0, false)
+                        .as_basic_value_enum());
                 } else {
                     self.builder.position_at_end(merge_bb);
 
                     let phi_ty = then_val.get_type();
                     assert_eq!(then_val.get_type(), else_val.get_type());
 
-                    let phi = self
-                        .builder
-                        .build_phi(phi_ty, "phi")
-                        .unwrap();
+                    let phi = self.builder.build_phi(phi_ty, "phi").unwrap();
 
                     if !then_has_terminator {
                         phi.add_incoming(&[(&then_val, then_end)]);
@@ -494,35 +1273,40 @@ impl<'ctx> CodeGen<'ctx> {
                         phi.add_incoming(&[(&else_val, else_end)]);
                     }
 
-                    return Ok(phi.as_basic_value().into_int_value())
+                    return Ok(phi.as_basic_value().into_int_value().as_basic_value_enum());
                 }
             }
 
-            Expr::While {
-                condition,
-                body
-            } => {
+            Expr::While { condition, body } => {
                 let function = self.current_fn.as_ref().unwrap();
-                let cond_bb = self.context.append_basic_block(function.value, "while_cond");
-                let body_bb = self.context.append_basic_block(function.value, "while_body");
+                let cond_bb = self
+                    .context
+                    .append_basic_block(function.value, "while_cond");
+                let body_bb = self
+                    .context
+                    .append_basic_block(function.value, "while_body");
                 let end_bb = self.context.append_basic_block(function.value, "while_end");
 
                 self.builder.build_unconditional_branch(cond_bb).unwrap();
 
                 self.builder.position_at_end(cond_bb);
 
-                let cond_value = self.compile_expression(condition.expr.clone(), Some(condition.ty))?;
+                let cond_value =
+                    self.compile_expression(condition.expr.clone(), Some(condition.ty))?;
                 let cond_bool = self
                     .builder
-                    .build_int_truncate(cond_value, self.context.bool_type(), "cond")
+                    .build_int_truncate(
+                        cond_value.into_int_value(),
+                        self.context.bool_type(),
+                        "cond",
+                    )
                     .unwrap();
 
                 self.builder
                     .build_conditional_branch(cond_bool, body_bb, end_bb)
                     .unwrap();
 
-                self.builder
-                    .position_at_end(body_bb);
+                self.builder.position_at_end(body_bb);
 
                 for stmt in body {
                     self.compile_statement(&stmt, None)?;
@@ -530,18 +1314,23 @@ impl<'ctx> CodeGen<'ctx> {
 
                 // Check if there are any terminators at the end of the while block
                 // if not then unconditionally go to the condition to continue the loop
-                if self.builder
+                if self
+                    .builder
                     .get_insert_block()
                     .unwrap()
                     .get_terminator()
-                    .is_none() {
-                        self.builder
-                            .build_unconditional_branch(cond_bb).unwrap();
+                    .is_none()
+                {
+                    self.builder.build_unconditional_branch(cond_bb).unwrap();
                 }
 
                 // End
                 self.builder.position_at_end(end_bb);
-                Ok(self.context.i64_type().const_int(0, false))
+                Ok(self
+                    .context
+                    .i64_type()
+                    .const_int(0, false)
+                    .as_basic_value_enum())
             }
         }
     }
@@ -551,7 +1340,6 @@ impl<'ctx> CodeGen<'ctx> {
         value: Literal,
         _expected: Option<DataType>,
     ) -> (DataType, BasicValueEnum<'ctx>) {
-
         while if 1 > 0 { true } else { false } {
             println!("hello there!");
         }
@@ -620,7 +1408,16 @@ impl<'ctx> CodeGen<'ctx> {
         let llvm_type = self.llvm_type(ty).unwrap();
         Ok((
             builder.build_alloca(llvm_type, name).unwrap(),
-            BasicTypeEnum::IntType(llvm_type),
+            match ty {
+                DataType::I32 => llvm_type.into_int_type().as_basic_type_enum(),
+                DataType::I64 => llvm_type.into_int_type().as_basic_type_enum(),
+                DataType::U32 => llvm_type.into_int_type().as_basic_type_enum(),
+                DataType::U64 => llvm_type.into_int_type().as_basic_type_enum(),
+                DataType::F32 => llvm_type.into_float_type().as_basic_type_enum(),
+                DataType::F64 => llvm_type.into_float_type().as_basic_type_enum(),
+
+                _ => unimplemented!(),
+            },
         ))
     }
 }
@@ -640,13 +1437,15 @@ impl<'ctx> CodeGen<'ctx> {
         todo!();
     }
 
-    fn llvm_type(&self, typ: &DataType) -> Result<IntType<'ctx>, String> {
+    fn llvm_type(&self, typ: &DataType) -> Result<BasicTypeEnum<'ctx>, String> {
         match typ {
-            DataType::I32 => return Ok(self.context.i32_type()),
-            DataType::I64 => Ok(self.context.i64_type()),
-            DataType::U32 => Ok(self.context.i32_type()),
-            DataType::U64 => Ok(self.context.i32_type()),
-            DataType::Boolean => Ok(self.context.bool_type()),
+            DataType::I32 => return Ok(self.context.i32_type().into()),
+            DataType::I64 => Ok(self.context.i64_type().into()),
+            DataType::U32 => Ok(self.context.i32_type().into()),
+            DataType::U64 => Ok(self.context.i32_type().into()),
+            DataType::F32 => Ok(self.context.f32_type().into()),
+            DataType::F64 => Ok(self.context.f64_type().into()),
+            DataType::Boolean => Ok(self.context.bool_type().into()),
             _ => unimplemented!("{}", format!("{} is not implemented", typ.to_str())),
         }
     }

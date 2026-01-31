@@ -104,8 +104,8 @@ pub enum Expr {
 #[derive(Debug, Clone)]
 pub enum Literal {
     // TODO: Support more types, be specific
-    // Handle better
     Number(i64),
+    Float(f64),
     String(String),
     Boolean(bool),
     None,
@@ -214,6 +214,7 @@ impl Literal {
     fn as_string(self) -> String {
         match self {
             Self::Number(no) => format!("Integer:\n {}", no),
+            Self::Float(no) => format!("Float:\n {}", no),
             Self::String(str) => format!("String:\n {}", str),
             Self::None => "Literal:\nNone".to_string(),
             Self::Boolean(boolean) => format!("Boolean: {}", boolean),

@@ -126,6 +126,7 @@ impl Analyzer {
                 match lit {
                     // TODO: Check number range
                     Literal::Number(_) => expr.ty = DataType::I32,
+                    Literal::Float(_) => expr.ty = DataType::F32,
                     Literal::Boolean(_) => expr.ty = DataType::Boolean,
                     Literal::String(_) => expr.ty = DataType::String,
                     // It should have corresponding None representation in DataType
@@ -176,14 +177,21 @@ impl Analyzer {
 
                 match op {
                     BinaryOp::Plus | BinaryOp::Minus | BinaryOp::Star | BinaryOp::Slash | BinaryOp::Mod => {
-                        if left.ty != DataType::I32 || right.ty != DataType::I32 {
+                        if left.ty != right.ty && (
+                            left.ty != DataType::I32
+                            || right.ty != DataType::I64
+                            || right.ty != DataType::U32
+                            || right.ty != DataType::U64
+                            || right.ty != DataType::F32
+                            || right.ty != DataType::F64 )
+                            {
                             return Err(format!(
-                                "Binary Operation requires int operands, got {} and {}",
+                                "Binary Operation requires int | float operands, got {} and {}",
                                 left.ty.to_str(),
                                 right.ty.to_str()
                             ));
                         }
-                        expr.ty = DataType::I32
+                        expr.ty = left.ty.clone()
                     }
                     BinaryOp::Lesser
                     | BinaryOp::Greater

@@ -325,10 +325,10 @@ impl Parser {
         if matches_token!(self, TokenType::While) {
             let condition = self.expression()?;
             let body = self.block_expression()?;
-            return Ok(ast::Expr::While{
+            return Ok(ast::Expr::While {
                 condition: Box::new(condition),
                 body,
-            })
+            });
         } else {
             return self.if_expression();
         }
@@ -340,7 +340,9 @@ impl Parser {
             let if_block = self.block_expression()?;
             let else_block = if matches_token!(self, TokenType::Else) {
                 if self.check(TokenType::If) {
-                    Some(vec![ast::Statement::Expr(ast::TypedExpr::unknown(self.if_expression()?))])
+                    Some(vec![ast::Statement::Expr(ast::TypedExpr::unknown(
+                        self.if_expression()?,
+                    ))])
                 } else {
                     Some(self.block_expression()?)
                 }
@@ -566,6 +568,16 @@ impl Parser {
             let obj = number.object.unwrap();
             if let Object::Integer(num) = obj {
                 return Ok(ast::Expr::Literal(ast::Literal::Number(num as i64)));
+            } else {
+                panic!("Expected Integer in Token got: {:?}", obj)
+            }
+        }
+
+        if matches_token!(self, TokenType::Float) {
+            let number = self.previous();
+            let obj = number.object.unwrap();
+            if let Object::Float(num) = obj {
+                return Ok(ast::Expr::Literal(ast::Literal::Float(num)));
             } else {
                 panic!("Expected Integer in Token got: {:?}", obj)
             }

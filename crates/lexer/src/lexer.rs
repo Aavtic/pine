@@ -48,6 +48,7 @@ pub enum TokenType {
     Identifier,
     String,
     Number,
+    Float,
 
     // Keywords
     Fn,
@@ -70,6 +71,7 @@ pub enum TokenType {
 pub enum Object {
     String(String),
     Integer(usize),
+    Float(f64),
 }
 
 #[derive(Debug)]
@@ -182,6 +184,14 @@ impl Tokenizer {
             .unwrap()
     }
 
+    fn get_float(&self) -> f64 {
+        self.source
+            .get(self.start..self.current)
+            .unwrap()
+            .parse::<f64>()
+            .unwrap()
+    }
+
     fn add_token_string(&mut self) {
         while self.peek() != '"' && !self.is_end() {
             self.advance();
@@ -200,13 +210,25 @@ impl Tokenizer {
     }
 
     fn add_token_number(&mut self) {
-        while self.peek().is_numeric() {
+        let mut found_decimal = false;
+        while self.peek().is_numeric() || self.peek() == '.' {
+            if self.peek() == '.' {
+                if found_decimal {
+                    break
+                } else {
+                    found_decimal = true
+                }
+            }
             self.advance();
         }
 
-        let number = self.get_number();
-
-        self.add_token(TokenType::Number, Some(Object::Integer(number)));
+        if found_decimal {
+            let float = self.get_float();
+            self.add_token(TokenType::Float, Some(Object::Float(float)))
+        } else {
+            let number = self.get_number();
+            self.add_token(TokenType::Number, Some(Object::Integer(number)));
+        }
     }
 
     fn add_token_identifier(&mut self) {

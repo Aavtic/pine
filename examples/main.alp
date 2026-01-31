@@ -1,11 +1,8 @@
-fn is_even(n: i32) -> bool {
-    if n % 2 == 0 {
-        return true
-    } else {
-        return false
-    }
-}
-
 fn main() {
-    return if is_even(1024) { 1 } else { 0 }
+    let a: f64 = 1.2
+    let b: f64 = 2.3
+    let c: f64 = a + b;
+    let check: f64 = 3.5
+
+    return if c == check { 1 } else { 0 }
 }

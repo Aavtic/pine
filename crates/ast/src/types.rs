@@ -5,6 +5,8 @@ pub enum DataType {
     I64,
     U32,
     U64,
+    F32,
+    F64,
     String,
     Void,
     Unit,
@@ -21,6 +23,8 @@ impl DataType {
             DataType::U64 => "u32",
             DataType::I32 => "i32",
             DataType::I64 => "i32",
+            DataType::F32 => "f32",
+            DataType::F64 => "f32",
             DataType::String => "string",
             DataType::Void  => "void",
             DataType::Boolean => "boolean",
@@ -38,8 +42,12 @@ impl DataType {
             "u64" => DataType::U64,
             "i32" => DataType::I32,
             "i64" => DataType::I64,
+            "f32" => DataType::F32,
+            "f64" => DataType::F64,
             "bool" => DataType::Boolean,
-            _     => DataType::Unknown,
+            _     => {println!("[INFO]: Creating unknown type");
+                DataType::Unknown
+            },
         }
     }
 }
@@ -51,6 +59,11 @@ impl DataType {
             (DataType::I32, DataType::I32) => Ok(DataType::I32),
             (DataType::I64, DataType::I64) => Ok(DataType::I64),
             (DataType::U64, DataType::U64) => Ok(DataType::U64),
+            (DataType::I64, DataType::I32) => Ok(DataType::I64),
+            (DataType::U64, DataType::U32) => Ok(DataType::U64),
+            (DataType::F64, DataType::F32) => Ok(DataType::F64),
+            (DataType::F32, DataType::F32) => Ok(DataType::F32),
+            (DataType::F64, DataType::F64) => Ok(DataType::F64),
             (DataType::Boolean, DataType::Boolean) => Ok(DataType::Boolean),
             (DataType::Void, DataType::Void) => Ok(DataType::Void),
 
