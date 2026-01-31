@@ -356,7 +356,7 @@ impl Parser {
                 else_block,
             });
         } else {
-            return self.equality();
+            return self.logical();
         }
     }
 
@@ -380,6 +380,31 @@ impl Parser {
         )?;
 
         return Ok(statements);
+    }
+
+    fn logical(&mut self) -> Result<ast::Expr, ParseError> {
+        let mut expr = self.equality();
+
+        if expr.is_err() {
+            return expr;
+        };
+
+        while matches_token!(self, TokenType::And, TokenType::Or) {
+            let operator = self.previous();
+            let right = self.equality();
+
+            if right.is_err() {
+                return right;
+            };
+
+            expr = Ok(ast::Expr::Binary {
+                left: Box::new(ast::TypedExpr::unknown(expr.unwrap())),
+                op: ast::BinaryOp::from(operator.token_type),
+                right: Box::new(ast::TypedExpr::unknown(right.unwrap())),
+            })
+        }
+
+        return expr;
     }
 
     fn equality(&mut self) -> Result<ast::Expr, ParseError> {
