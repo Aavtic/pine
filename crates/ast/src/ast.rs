@@ -132,6 +132,8 @@ pub enum BinaryOp {
     Plus, Minus,
     Star, Slash, Mod,
 
+    Or, And,
+
     EqualEqual, NotEqual,
     Greater, GreaterEqual,
     Lesser, LesserEqual,
@@ -146,6 +148,10 @@ impl From<TokenType> for BinaryOp {
             TokenType::Star => BinaryOp::Star,
             TokenType::Slash => BinaryOp::Slash,
             TokenType::Mod  => BinaryOp::Mod,
+
+            TokenType::Or => BinaryOp::Or,
+            TokenType::And => BinaryOp::And,
+
             TokenType::EqualEqual => BinaryOp::EqualEqual,
             TokenType::BangEqual => BinaryOp::NotEqual,
             TokenType::Greater => BinaryOp::Greater,
@@ -182,6 +188,9 @@ impl BinaryOp {
             BinaryOp::Star => "Binary\n*",
 					  BinaryOp::Slash => "Binary\n/",
             BinaryOp::Mod => "Binary\n%",
+            BinaryOp::Or => "Binary\n% ||",
+            BinaryOp::And => "Binary\n% &&",
+
 
             BinaryOp::EqualEqual => "Binary\n==",
 					  BinaryOp::NotEqual => "Binary\n!=",
@@ -199,6 +208,9 @@ impl BinaryOp {
             BinaryOp::Star => "*",
 					  BinaryOp::Slash => "/",
             BinaryOp::Mod   => "%",
+
+            BinaryOp::Or => "||",
+            BinaryOp::And => "&&",
 
             BinaryOp::EqualEqual => "==",
 					  BinaryOp::NotEqual => "!=",

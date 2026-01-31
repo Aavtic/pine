@@ -581,6 +581,23 @@ impl<'ctx> CodeGen<'ctx> {
                             _ => unimplemented!(),
                         });
                     }
+
+                    BinaryOp::And => {
+                        return Ok(self
+                            .builder
+                            .build_and(l.into_int_value(), r.into_int_value(), "and")
+                            .unwrap()
+                            .as_basic_value_enum())
+                    }
+
+                    BinaryOp::Or => {
+                        return Ok(self
+                            .builder
+                            .build_or(l.into_int_value(), r.into_int_value(), "and")
+                            .unwrap()
+                            .as_basic_value_enum())
+                    }
+
                     BinaryOp::Lesser => match ty {
                         DataType::I32 => {
                             let cmp = self
@@ -1429,6 +1446,7 @@ impl<'ctx> CodeGen<'ctx> {
                 DataType::U64 => llvm_type.into_int_type().as_basic_type_enum(),
                 DataType::F32 => llvm_type.into_float_type().as_basic_type_enum(),
                 DataType::F64 => llvm_type.into_float_type().as_basic_type_enum(),
+                DataType::Boolean => llvm_type.into_int_type().as_basic_type_enum(),
 
                 _ => unimplemented!(),
             },

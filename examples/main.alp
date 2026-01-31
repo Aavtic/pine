@@ -1,3 +1,4 @@
 fn main() {
-    return if true == (!false || false) { 1 } else { 0 }
+    let a = true && (true && !false);
+    return if a { 1 } else { 0 } 
 }

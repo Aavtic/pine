@@ -166,7 +166,7 @@ impl Analyzer {
                                 inner.ty.to_str()
                             ));
                         }
-                        inner.ty = DataType::Boolean;
+                        expr.ty = DataType::Boolean
                     }
                 }
             }
@@ -209,6 +209,17 @@ impl Analyzer {
                             ));
                         }
                         expr.ty = DataType::Boolean;
+                    }
+
+                    BinaryOp::And | BinaryOp::Or => {
+                        if left.ty != DataType::Boolean || right.ty != DataType::Boolean {
+                            return Err(format!(
+                                    "Logical operators can only operate on `bool` type. got {} and {}",
+                                    left.ty.to_str(),
+                                    right.ty.to_str()
+                            ));
+                        }
+                        expr.ty = DataType::Boolean
                     }
 
                     BinaryOp::EqualEqual | BinaryOp::NotEqual => {
