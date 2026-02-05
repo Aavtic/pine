@@ -7,7 +7,8 @@ pub enum DataType {
     U64,
     F32,
     F64,
-    String,
+    Str,
+    Pointer(Box<DataType>),
     Void,
     Unit,
     Boolean,
@@ -25,7 +26,8 @@ impl DataType {
             DataType::I64 => "i32",
             DataType::F32 => "f32",
             DataType::F64 => "f32",
-            DataType::String => "string",
+            DataType::Str => "str",
+            DataType::Pointer(_) => "ptr",
             DataType::Void  => "void",
             DataType::Boolean => "boolean",
             DataType::Function{..} => "function",
@@ -44,6 +46,7 @@ impl DataType {
             "i64" => DataType::I64,
             "f32" => DataType::F32,
             "f64" => DataType::F64,
+            "str" => DataType::Str,
             "bool" => DataType::Boolean,
             _     => {println!("[INFO]: Creating unknown type");
                 DataType::Unknown
@@ -66,6 +69,7 @@ impl DataType {
             (DataType::F64, DataType::F64) => Ok(DataType::F64),
             (DataType::Boolean, DataType::Boolean) => Ok(DataType::Boolean),
             (DataType::Void, DataType::Void) => Ok(DataType::Void),
+            (DataType::Str, DataType::Str) => Ok(DataType::Str),
 
             // Unknown types can unify with anything
 

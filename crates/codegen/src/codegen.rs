@@ -244,25 +244,28 @@ impl<'ctx> CodeGen<'ctx> {
             Statement::Assignment(assign) => {
                 if let Some(variable) = self.variables.clone().get(&assign.name) {
                     let compiled_value = self
-                        .compile_expression(assign.value.expr.clone(), Some(variable.datatype.clone()))
+                        .compile_expression(
+                            assign.value.expr.clone(),
+                            Some(variable.datatype.clone()),
+                        )
                         .unwrap();
                     self.builder
                         .build_store(variable.ptr, compiled_value)
                         .unwrap();
                 } else {
-                    panic!("{}", format!("assignment to undefined variable: {}", assign.name.clone()));
+                    panic!(
+                        "{}",
+                        format!("assignment to undefined variable: {}", assign.name.clone())
+                    );
                 }
                 //Ok(Some(compiled_value.into_int_value()))
                 return Ok(None);
             }
 
             Statement::Return(ret_stmt) => {
-                let ret_ty = self.current_fn.as_ref()
-                    .unwrap()
-                    .datatype.clone();
+                let ret_ty = self.current_fn.as_ref().unwrap().datatype.clone();
                 if let Some(expr) = &ret_stmt.value {
-                    let value =
-                        self.compile_expression(expr.expr.clone(), Some(ret_ty))?;
+                    let value = self.compile_expression(expr.expr.clone(), Some(ret_ty))?;
                     self.builder.build_return(Some(&value)).unwrap();
                     return Ok(Some(value.as_basic_value_enum()));
                 } else {
@@ -293,68 +296,7 @@ impl<'ctx> CodeGen<'ctx> {
     ) -> Result<BasicValueEnum<'ctx>, String> {
         // Todo : Check expected
         match expression {
-            Expr::Literal(lit) => match lit {
-                Literal::Number(n) => {
-                    if expected.is_none() {
-                        unreachable!()
-                    }
-                    return Ok(match expected.unwrap() {
-                        DataType::I32 => self
-                            .context
-                            .i32_type()
-                            .const_int(n as u64, true)
-                            .as_basic_value_enum(),
-
-                        DataType::I64 => self
-                            .context
-                            .i64_type()
-                            .const_int(n as u64, true)
-                            .as_basic_value_enum(),
-
-                        DataType::U32 => self
-                            .context
-                            .i32_type()
-                            .const_int(n as u64, false)
-                            .as_basic_value_enum(),
-
-                        DataType::U64 => self
-                            .context
-                            .i32_type()
-                            .const_int(n as u64, false)
-                            .as_basic_value_enum(),
-                        _ => unreachable!(),
-                    });
-                }
-                Literal::Float(n) => {
-                    if expected.is_none() {
-                        return Ok(self
-                            .context
-                            .f64_type()
-                            .const_float(n as f64)
-                            .as_basic_value_enum());
-                    }
-                    return Ok(match expected.unwrap() {
-                        DataType::F32 => self
-                            .context
-                            .f32_type()
-                            .const_float(n as f64)
-                            .as_basic_value_enum(),
-
-                        DataType::F64 => self
-                            .context
-                            .f64_type()
-                            .const_float(n as f64)
-                            .as_basic_value_enum(),
-                        _ => unreachable!(),
-                    });
-                }
-                Literal::Boolean(b) => Ok(self
-                    .context
-                    .bool_type()
-                    .const_int(b as u64, false)
-                    .into()),
-                _ => unimplemented!(),
-            },
+            Expr::Literal(lit) => self.compile_value(lit, expected),
 
             Expr::Variable { name, .. } => {
                 let variable = self
@@ -590,7 +532,7 @@ impl<'ctx> CodeGen<'ctx> {
                             .builder
                             .build_and(l.into_int_value(), r.into_int_value(), "and")
                             .unwrap()
-                            .as_basic_value_enum())
+                            .as_basic_value_enum());
                     }
 
                     BinaryOp::Or => {
@@ -598,7 +540,7 @@ impl<'ctx> CodeGen<'ctx> {
                             .builder
                             .build_or(l.into_int_value(), r.into_int_value(), "and")
                             .unwrap()
-                            .as_basic_value_enum())
+                            .as_basic_value_enum());
                     }
 
                     BinaryOp::Lesser => match ty {
@@ -1011,7 +953,8 @@ impl<'ctx> CodeGen<'ctx> {
                                     r.into_int_value(),
                                     "eq",
                                 )
-                                .unwrap().as_basic_value_enum(),
+                                .unwrap()
+                                .as_basic_value_enum(),
                             DataType::I64 => self
                                 .builder
                                 .build_int_compare(
@@ -1020,7 +963,8 @@ impl<'ctx> CodeGen<'ctx> {
                                     r.into_int_value(),
                                     "eq",
                                 )
-                                .unwrap().as_basic_value_enum(),
+                                .unwrap()
+                                .as_basic_value_enum(),
                             DataType::U32 => self
                                 .builder
                                 .build_int_compare(
@@ -1029,7 +973,8 @@ impl<'ctx> CodeGen<'ctx> {
                                     r.into_int_value(),
                                     "eq",
                                 )
-                                .unwrap().as_basic_value_enum(),
+                                .unwrap()
+                                .as_basic_value_enum(),
                             DataType::U64 => self
                                 .builder
                                 .build_int_compare(
@@ -1038,7 +983,8 @@ impl<'ctx> CodeGen<'ctx> {
                                     r.into_int_value(),
                                     "eq",
                                 )
-                                .unwrap().as_basic_value_enum(),
+                                .unwrap()
+                                .as_basic_value_enum(),
                             DataType::F32 => self
                                 .builder
                                 .build_float_compare(
@@ -1047,7 +993,8 @@ impl<'ctx> CodeGen<'ctx> {
                                     r.into_float_value(),
                                     "eq",
                                 )
-                                .unwrap().as_basic_value_enum(),
+                                .unwrap()
+                                .as_basic_value_enum(),
                             DataType::F64 => self
                                 .builder
                                 .build_float_compare(
@@ -1056,10 +1003,11 @@ impl<'ctx> CodeGen<'ctx> {
                                     r.into_float_value(),
                                     "eq",
                                 )
-                                .unwrap().as_basic_value_enum(),
+                                .unwrap()
+                                .as_basic_value_enum(),
 
-                                // Return Boolean instantly due to type mismatch between
-                                // other types and boolean
+                            // Return Boolean instantly due to type mismatch between
+                            // other types and boolean
                             DataType::Boolean => self
                                 .builder
                                 .build_int_compare(
@@ -1068,23 +1016,80 @@ impl<'ctx> CodeGen<'ctx> {
                                     r.into_int_value(),
                                     "eq",
                                 )
-                                .unwrap().as_basic_value_enum(),
+                                .unwrap()
+                                .as_basic_value_enum(),
+
 
                             _ => unimplemented!(),
                         };
 
                         match expected.unwrap() {
-                            DataType::U32 => Ok(self.builder.build_int_z_extend(cmp.into_int_value(), self.context.i32_type(), "ext").unwrap().as_basic_value_enum()),
-                            DataType::U64 => Ok(self.builder.build_int_z_extend(cmp.into_int_value(), self.context.i64_type(), "ext").unwrap().as_basic_value_enum()),
-                            DataType::I32 => Ok(self.builder.build_int_z_extend(cmp.into_int_value(), self.context.i32_type(), "ext").unwrap().as_basic_value_enum()),
-                            DataType::I64 => Ok(self.builder.build_int_z_extend(cmp.into_int_value(), self.context.i64_type(), "ext").unwrap().as_basic_value_enum()),
-                            DataType::F32 => Ok(self.builder.build_float_ext(cmp.into_float_value(), self.context.f32_type(), "ext").unwrap().as_basic_value_enum()),
-                            DataType::F64 => Ok(self.builder.build_float_ext(cmp.into_float_value(), self.context.f64_type(), "ext").unwrap().as_basic_value_enum()),
-                            DataType::Boolean => Ok(self.builder.build_int_z_extend(cmp.into_int_value(), self.context.bool_type(), "ext").unwrap().as_basic_value_enum()),
+                            DataType::U32 => Ok(self
+                                .builder
+                                .build_int_z_extend(
+                                    cmp.into_int_value(),
+                                    self.context.i32_type(),
+                                    "ext",
+                                )
+                                .unwrap()
+                                .as_basic_value_enum()),
+                            DataType::U64 => Ok(self
+                                .builder
+                                .build_int_z_extend(
+                                    cmp.into_int_value(),
+                                    self.context.i64_type(),
+                                    "ext",
+                                )
+                                .unwrap()
+                                .as_basic_value_enum()),
+                            DataType::I32 => Ok(self
+                                .builder
+                                .build_int_z_extend(
+                                    cmp.into_int_value(),
+                                    self.context.i32_type(),
+                                    "ext",
+                                )
+                                .unwrap()
+                                .as_basic_value_enum()),
+                            DataType::I64 => Ok(self
+                                .builder
+                                .build_int_z_extend(
+                                    cmp.into_int_value(),
+                                    self.context.i64_type(),
+                                    "ext",
+                                )
+                                .unwrap()
+                                .as_basic_value_enum()),
+                            DataType::F32 => Ok(self
+                                .builder
+                                .build_float_ext(
+                                    cmp.into_float_value(),
+                                    self.context.f32_type(),
+                                    "ext",
+                                )
+                                .unwrap()
+                                .as_basic_value_enum()),
+                            DataType::F64 => Ok(self
+                                .builder
+                                .build_float_ext(
+                                    cmp.into_float_value(),
+                                    self.context.f64_type(),
+                                    "ext",
+                                )
+                                .unwrap()
+                                .as_basic_value_enum()),
+                            DataType::Boolean => Ok(self
+                                .builder
+                                .build_int_z_extend(
+                                    cmp.into_int_value(),
+                                    self.context.bool_type(),
+                                    "ext",
+                                )
+                                .unwrap()
+                                .as_basic_value_enum()),
 
                             _ => unimplemented!(),
                         }
-                        
                     }
                     BinaryOp::NotEqual => {
                         let cmp = match ty {
@@ -1096,7 +1101,8 @@ impl<'ctx> CodeGen<'ctx> {
                                     r.into_int_value(),
                                     "ne",
                                 )
-                                .unwrap().as_basic_value_enum(),
+                                .unwrap()
+                                .as_basic_value_enum(),
                             DataType::I64 => self
                                 .builder
                                 .build_int_compare(
@@ -1105,7 +1111,8 @@ impl<'ctx> CodeGen<'ctx> {
                                     r.into_int_value(),
                                     "ne",
                                 )
-                                .unwrap().as_basic_value_enum(),
+                                .unwrap()
+                                .as_basic_value_enum(),
                             DataType::U32 => self
                                 .builder
                                 .build_int_compare(
@@ -1114,7 +1121,8 @@ impl<'ctx> CodeGen<'ctx> {
                                     r.into_int_value(),
                                     "ne",
                                 )
-                                .unwrap().as_basic_value_enum(),
+                                .unwrap()
+                                .as_basic_value_enum(),
                             DataType::U64 => self
                                 .builder
                                 .build_int_compare(
@@ -1123,7 +1131,8 @@ impl<'ctx> CodeGen<'ctx> {
                                     r.into_int_value(),
                                     "ne",
                                 )
-                                .unwrap().as_basic_value_enum(),
+                                .unwrap()
+                                .as_basic_value_enum(),
                             DataType::F32 => self
                                 .builder
                                 .build_float_compare(
@@ -1132,7 +1141,8 @@ impl<'ctx> CodeGen<'ctx> {
                                     r.into_float_value(),
                                     "ne",
                                 )
-                                .unwrap().as_basic_value_enum(),
+                                .unwrap()
+                                .as_basic_value_enum(),
                             DataType::F64 => self
                                 .builder
                                 .build_float_compare(
@@ -1141,10 +1151,11 @@ impl<'ctx> CodeGen<'ctx> {
                                     r.into_float_value(),
                                     "ne",
                                 )
-                                .unwrap().as_basic_value_enum(),
+                                .unwrap()
+                                .as_basic_value_enum(),
 
-                                // Return Boolean instantly due to type mismatch between
-                                // other types and boolean
+                            // Return Boolean instantly due to type mismatch between
+                            // other types and boolean
                             DataType::Boolean => self
                                 .builder
                                 .build_int_compare(
@@ -1153,23 +1164,80 @@ impl<'ctx> CodeGen<'ctx> {
                                     r.into_int_value(),
                                     "ne",
                                 )
-                                .unwrap().as_basic_value_enum(),
+                                .unwrap()
+                                .as_basic_value_enum(),
 
                             _ => unimplemented!(),
                         };
 
                         match expected.unwrap() {
-                            DataType::U32 => Ok(self.builder.build_int_z_extend(cmp.into_int_value(), self.context.i32_type(), "ext").unwrap().as_basic_value_enum()),
-                            DataType::U64 => Ok(self.builder.build_int_z_extend(cmp.into_int_value(), self.context.i64_type(), "ext").unwrap().as_basic_value_enum()),
-                            DataType::I32 => Ok(self.builder.build_int_z_extend(cmp.into_int_value(), self.context.i32_type(), "ext").unwrap().as_basic_value_enum()),
-                            DataType::I64 => Ok(self.builder.build_int_z_extend(cmp.into_int_value(), self.context.i64_type(), "ext").unwrap().as_basic_value_enum()),
-                            DataType::F32 => Ok(self.builder.build_float_ext(cmp.into_float_value(), self.context.f32_type(), "ext").unwrap().as_basic_value_enum()),
-                            DataType::F64 => Ok(self.builder.build_float_ext(cmp.into_float_value(), self.context.f64_type(), "ext").unwrap().as_basic_value_enum()),
-                            DataType::Boolean => Ok(self.builder.build_int_z_extend(cmp.into_int_value(), self.context.bool_type(), "ext").unwrap().as_basic_value_enum()),
+                            DataType::U32 => Ok(self
+                                .builder
+                                .build_int_z_extend(
+                                    cmp.into_int_value(),
+                                    self.context.i32_type(),
+                                    "ext",
+                                )
+                                .unwrap()
+                                .as_basic_value_enum()),
+                            DataType::U64 => Ok(self
+                                .builder
+                                .build_int_z_extend(
+                                    cmp.into_int_value(),
+                                    self.context.i64_type(),
+                                    "ext",
+                                )
+                                .unwrap()
+                                .as_basic_value_enum()),
+                            DataType::I32 => Ok(self
+                                .builder
+                                .build_int_z_extend(
+                                    cmp.into_int_value(),
+                                    self.context.i32_type(),
+                                    "ext",
+                                )
+                                .unwrap()
+                                .as_basic_value_enum()),
+                            DataType::I64 => Ok(self
+                                .builder
+                                .build_int_z_extend(
+                                    cmp.into_int_value(),
+                                    self.context.i64_type(),
+                                    "ext",
+                                )
+                                .unwrap()
+                                .as_basic_value_enum()),
+                            DataType::F32 => Ok(self
+                                .builder
+                                .build_float_ext(
+                                    cmp.into_float_value(),
+                                    self.context.f32_type(),
+                                    "ext",
+                                )
+                                .unwrap()
+                                .as_basic_value_enum()),
+                            DataType::F64 => Ok(self
+                                .builder
+                                .build_float_ext(
+                                    cmp.into_float_value(),
+                                    self.context.f64_type(),
+                                    "ext",
+                                )
+                                .unwrap()
+                                .as_basic_value_enum()),
+                            DataType::Boolean => Ok(self
+                                .builder
+                                .build_int_z_extend(
+                                    cmp.into_int_value(),
+                                    self.context.bool_type(),
+                                    "ext",
+                                )
+                                .unwrap()
+                                .as_basic_value_enum()),
 
                             _ => unimplemented!(),
                         }
-                    },
+                    }
                 }
             }
 
@@ -1367,11 +1435,91 @@ impl<'ctx> CodeGen<'ctx> {
 
     fn compile_value(
         &mut self,
-        value: Literal,
-        _expected: Option<DataType>,
-    ) -> (DataType, BasicValueEnum<'ctx>) {
+        lit: Literal,
+        expected: Option<DataType>,
+    ) -> Result<BasicValueEnum<'ctx>, String> {
+        match lit {
+            Literal::Number(n) => {
+                if expected.is_none() {
+                    unreachable!()
+                }
+                return Ok(match expected.unwrap() {
+                    DataType::I32 => self
+                        .context
+                        .i32_type()
+                        .const_int(n as u64, true)
+                        .as_basic_value_enum(),
 
-        todo!();
+                    DataType::I64 => self
+                        .context
+                        .i64_type()
+                        .const_int(n as u64, true)
+                        .as_basic_value_enum(),
+
+                    DataType::U32 => self
+                        .context
+                        .i32_type()
+                        .const_int(n as u64, false)
+                        .as_basic_value_enum(),
+
+                    DataType::U64 => self
+                        .context
+                        .i32_type()
+                        .const_int(n as u64, false)
+                        .as_basic_value_enum(),
+
+                    _ => unreachable!(),
+                });
+            }
+            Literal::Float(n) => {
+                if expected.is_none() {
+                    return Ok(self
+                        .context
+                        .f64_type()
+                        .const_float(n as f64)
+                        .as_basic_value_enum());
+                }
+                return Ok(match expected.unwrap() {
+                    DataType::F32 => self
+                        .context
+                        .f32_type()
+                        .const_float(n as f64)
+                        .as_basic_value_enum(),
+
+                    DataType::F64 => self
+                        .context
+                        .f64_type()
+                        .const_float(n as f64)
+                        .as_basic_value_enum(),
+                    _ => unreachable!(),
+                });
+            }
+            Literal::Boolean(b) => Ok(self.context.bool_type().const_int(b as u64, false).into()),
+
+            Literal::String(str) => {
+                let global = unsafe {
+                    self.builder
+                        .build_global_string(&str, "const_str")
+                        .unwrap()
+                };
+
+                global.set_constant(true);
+
+                let zero = self.context.i32_type().const_zero();
+
+                let str_ptr = unsafe {
+                    self.builder.build_gep(
+                        global.get_value_type().into_array_type(), 
+                        global.as_pointer_value(),
+                        &[zero, zero],
+                        "str_ptr",
+                    ).unwrap()
+                };
+
+                Ok(str_ptr.as_basic_value_enum())
+            }
+            _ => unimplemented!(),
+        }
     }
 
     fn create_main_function(&mut self) {}
@@ -1443,6 +1591,7 @@ impl<'ctx> CodeGen<'ctx> {
                 DataType::F32 => llvm_type.into_float_type().as_basic_type_enum(),
                 DataType::F64 => llvm_type.into_float_type().as_basic_type_enum(),
                 DataType::Boolean => llvm_type.into_int_type().as_basic_type_enum(),
+                DataType::Str     => llvm_type.into_pointer_type().as_basic_type_enum(),
 
                 _ => unimplemented!(),
             },
@@ -1474,6 +1623,8 @@ impl<'ctx> CodeGen<'ctx> {
             DataType::F32 => Ok(self.context.f32_type().into()),
             DataType::F64 => Ok(self.context.f64_type().into()),
             DataType::Boolean => Ok(self.context.bool_type().into()),
+            DataType::Str => Ok(self.context.ptr_type(AddressSpace::default()).into()),
+            DataType::Pointer(_) => Ok(self.context.ptr_type(AddressSpace::default()).into()),
             _ => unimplemented!("{}", format!("{} is not implemented", typ.to_str())),
         }
     }
