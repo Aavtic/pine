@@ -1309,19 +1309,19 @@ impl<'ctx> CodeGen<'ctx> {
                 // TODO resolve callee
                 //let callee = self.compile_expression(callee.expr, Some(callee.ty))?;
 
-                let function = if self.is_runtime_function(&name) {
-                    self.get_or_create_runtime_function(
-                        self.get_runtime_abi_name(&name),
-                        BasicTypeEnum::IntType(self.context.i32_type()),
-                        &[ self.context.ptr_type(AddressSpace::default()).into()] )
-                } else {
-                    self
+                //let function = if self.is_runtime_function(&name) {
+                //    self.get_or_create_runtime_function(
+                //        self.get_runtime_abi_name(&name),
+                //        BasicTypeEnum::IntType(self.context.i32_type()),
+                //        &[ self.context.ptr_type(AddressSpace::default()).into()] )
+                //} else {
+                let function = self
                     .functions
                     .get(&name)
                     .cloned()
                     .ok_or_else(|| {
-                        format!("Undefined function: {}", name)})?.value
-                };
+                        format!("Undefined function: {}", name)})?.value;
+                //};
 
                 let arg_values: Vec<BasicMetadataValueEnum> = args
                     .iter()
@@ -1339,7 +1339,6 @@ impl<'ctx> CodeGen<'ctx> {
                 Ok(call
                     .try_as_basic_value()
                     .unwrap_basic()
-                    .into_int_value()
                     .as_basic_value_enum())
             }
 
