@@ -62,6 +62,7 @@ pub enum TokenType {
     Else,
     While,
     Return,
+    Alien,
 
     EOF, // Marks the end of token stream
 }
@@ -249,6 +250,7 @@ impl Tokenizer {
             "for" => self.add_token(TokenType::For, None),
             "while" => self.add_token(TokenType::While, None),
             "return" => self.add_token(TokenType::Return, None),
+            "alien" => self.add_token(TokenType::Alien, None),
             "None" =>  self.add_token(TokenType::None, None),
 
             // Identifiers

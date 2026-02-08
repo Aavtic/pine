@@ -4,7 +4,7 @@ use crate::{function::Function, variable::Variable};
 
 use analyzer::analyzer::INBUILT_FUNCTIONS;
 
-pub const INBUILT_FUNCTIONS_TO_ABI: [&str;1] = ["pine_print"];
+pub const INBUILT_FUNCTIONS_TO_ABI: [&str;2] = ["pine_print", "pine_println"];
 
 // compile time assert
 macro_rules! const_assert {
@@ -82,7 +82,6 @@ impl<'ctx> CodeGen<'ctx> {
 
     pub fn compile(&mut self, statements: &Vec<Statement>) -> Result<&Module<'ctx>, String> {
         // Phase 1 delcare all functions
-
         for statement in statements {
             if let Statement::FunctionDefinition(fndef) = statement {
                 let fn_name = &fndef.fn_name.lexeme;
@@ -97,8 +96,24 @@ impl<'ctx> CodeGen<'ctx> {
                     .unwrap();
             }
         }
+        
+        // Phase 2 declare all alien functions
+        for statement in statements {
+            if let Statement::AlienDefinition(aliendef) = statement {
+                let fn_name = &aliendef.fn_name;
+                let mut input: Vec<(String, DataType)> = Vec::new();
+                let ret_type = aliendef.ret_type.clone();
 
-        // Phase 2
+                for arg in &aliendef.fn_arguments {
+                    input.push((arg.0.clone(), arg.1.clone()))
+                }
+
+                self.declare_function(fn_name, input.as_slice(), &ret_type)
+                    .unwrap();
+            }
+        }
+
+        // Phase 3
         for statement in statements {
             if let Statement::FunctionDefinition(_) = statement {
                 self.compile_statement(statement, None)?;
@@ -166,13 +181,11 @@ impl<'ctx> CodeGen<'ctx> {
                 self.variables.clear();
 
                 // Allocate parameters
-
                 for (i, (name, datatype)) in fndef.fn_arguments.iter().enumerate() {
                     let param_value = function
                         .value
                         .get_nth_param(i as u32)
-                        .unwrap()
-                        .into_int_value();
+                        .unwrap();
                     let datatype = datatype.clone();
                     let alloca = self
                         .create_entry_block_alloca(&function.value, name, &datatype)
@@ -253,6 +266,8 @@ impl<'ctx> CodeGen<'ctx> {
                 //        }
                 //));
             }
+
+            Statement::AlienDefinition(_) => Ok(None),
 
             Statement::Assignment(assign) => {
                 if let Some(variable) = self.variables.clone().get(&assign.name) {

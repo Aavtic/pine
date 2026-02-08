@@ -7,6 +7,8 @@ use crate::DataType;
 pub enum Statement {
     VariableDeclaration(VarDecl),
     FunctionDefinition(FunctionDefinition),
+    // alien fn print(string) -> i23; similar to extern in rust
+    AlienDefinition(AlienDefinition),
     Assignment(Assign),
     Return(ReturnStmt),
     Expr(TypedExpr),
@@ -45,6 +47,14 @@ pub struct FunctionDefinition {
     pub ret_type: DataType,
     pub fn_arguments: Vec<(String, DataType)>,
     pub body: Vec<Statement>
+}
+
+#[derive(Debug, Clone)]
+pub struct AlienDefinition {
+    pub abi_name: String,
+    pub fn_name: String,
+    pub ret_type: DataType,
+    pub fn_arguments: Vec<(String, DataType)>,
 }
 
 #[derive(Debug, Clone)]

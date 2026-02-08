@@ -124,6 +124,18 @@ impl Parser {
             }
         }
 
+        if matches_token!(self, TokenType::Alien) {
+            match self.alien_definition() {
+                Ok(aliendef) => return Some(ast::Statement::AlienDefinition(aliendef)),
+                Err(err) => {
+                    self._report_error(err);
+                    self.print_current_error();
+                    self.synchronize();
+                    return None;
+                }
+            }
+        }
+
         if matches_token!(self, TokenType::Identifier) {
             // Check if equal is present so that we can confirm assignment statement
             if self.check(TokenType::Equal) {
@@ -251,6 +263,90 @@ impl Parser {
             ret_type: return_type,
             fn_arguments: arguments,
             body,
+        });
+    }
+
+    fn alien_definition(&mut self) -> Result<ast::AlienDefinition, ParseError> {
+        let abi_name = self.consume(TokenType::String, "Expected ABI name after `alien`")?;
+        self.consume(TokenType::Fn, "Expected `fn` keyword after ABI name")?;
+
+        let fn_name = self.consume(TokenType::Identifier, "Expected Function Name after `fn`")?;
+        self.consume(TokenType::OpenPara, "Expected `(` after function name")?;
+
+        let mut arguments = Vec::new();
+
+        while !self.is_end() && !self.check(TokenType::ClosePara) {
+            // Confirm if previous has a comma or open bracket
+            if self.previous_check(TokenType::OpenPara) || self.check(TokenType::Comma) {
+                if self.check(TokenType::Comma) {
+                    self.advance();
+                }
+            } else {
+                return Err(ParseError::UnexpectedToken(
+                    format!(
+                        "Unexpected Token Found: `{}`",
+                        self.peek().lexeme.to_string()
+                    ),
+                    self.peek().line,
+                    self.peek().column,
+                ));
+            }
+
+            let identifier = self.consume(
+                TokenType::Identifier,
+                format!(
+                    "Parameter identifier expected, Found `{}`",
+                    self.peek().lexeme
+                )
+                .as_str(),
+            )?;
+            let mut data_type = DataType::Unknown;
+            if self.check(TokenType::Colon) {
+                self.advance();
+                let datatype_lexeme = self
+                    .consume(
+                        TokenType::Identifier,
+                        format!("Expected Type, Found `{}`", self.peek().lexeme).as_str(),
+                    )?
+                    .lexeme;
+                data_type = DataType::from(&datatype_lexeme);
+            }
+            arguments.push((identifier.lexeme.to_string(), data_type));
+
+        }
+
+        self.consume(
+            TokenType::ClosePara,
+            format!("Expected Closing para `)` found `{}`", self.peek().lexeme).as_str(),
+        )?;
+
+        // Now Check if Function return type is defined
+        // todo: revisit this. can abi function return unknown?
+        let mut return_type = DataType::Unknown;
+
+        if self.check(TokenType::RightArrow) {
+            self.advance();
+            let return_type_tok = self.consume(
+                TokenType::Identifier,
+                format!(
+                    "Expected Function Return type after `->`, found: {}",
+                    self.peek().lexeme
+                )
+                .as_str(),
+            )?;
+            return_type = DataType::from(&return_type_tok.lexeme);
+        }
+
+        // Consume semicolon if exists
+        if self.check(TokenType::SemiColon) {
+            self.advance();
+        }
+
+        return Ok(ast::AlienDefinition{
+            abi_name: abi_name.lexeme,
+            fn_name: fn_name.lexeme,
+            ret_type: return_type,
+            fn_arguments: arguments,
         });
     }
 

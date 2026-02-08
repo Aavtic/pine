@@ -6,7 +6,7 @@ use std::collections::HashMap;
 
 pub type TypeEnv = HashMap<String, DataType>;
 
-pub const INBUILT_FUNCTIONS: [&str;1] = ["print"];
+pub const INBUILT_FUNCTIONS: [&str;2] = ["print", "println"];
 
 pub struct Analyzer {}
 
@@ -37,7 +37,43 @@ impl Analyzer {
             }
         }
 
-        // Pass 2 Type check each statement
+        // Pass 2: collect alien function signatures
+        for statement in ast.iter() {
+            if let Statement::AlienDefinition(fndef) = statement {
+                let fndef = fndef.clone();
+                let name = fndef.fn_name;
+                let params = fndef.fn_arguments;
+                let return_type = fndef.ret_type;
+
+                let param_types: Vec<DataType> = params.iter().map(|x| x.1.clone()).collect();
+                let func_type = DataType::Function {
+                    params: param_types,
+                    ret_type: Box::new(return_type.clone()),
+                };
+
+                env.insert(name, func_type);
+            }
+        }
+
+        // Pass 3 add inbuilt function signatures
+
+        for statement in ast.iter() {
+            if let Statement::FunctionDefinition(fndef) = statement {
+                let fndef = fndef.clone(); let name = fndef.fn_name.lexeme;
+                let params = fndef.fn_arguments;
+                let return_type = fndef.ret_type;
+
+                let param_types: Vec<DataType> = params.iter().map(|x| x.1.clone()).collect();
+                let func_type = DataType::Function {
+                    params: param_types,
+                    ret_type: Box::new(return_type.clone()),
+                };
+
+                env.insert(name, func_type);
+            }
+        }
+
+        // Pass 4 Type check each statement
 
         for stmt in ast.iter_mut() {
             self.typecheck_statement(stmt, &mut env)?;
@@ -115,6 +151,19 @@ impl Analyzer {
                 }
             }
 
+            Statement::AlienDefinition(aliendef) => {
+                // ensure none of types are unknown 
+                for (_, typ) in aliendef.fn_arguments.iter() {
+                    if typ == &DataType::Unknown {
+                    return Err(format!(
+                        "alien function param cannot be Unknown: {} is Unknown",
+                        typ.to_str()
+                    ));
+                    }
+                }
+                return Ok(DataType::Unit)
+            }
+
             Statement::Expr(ex) => {
                 self.typecheck_expr(ex, env)?;
                 Ok(ex.ty.clone())
@@ -140,8 +189,6 @@ impl Analyzer {
                 if let Some(ty) = env.get(name.as_str()) {
                     expr.ty = ty.clone();
                 } else {
-                    if INBUILT_FUNCTIONS.contains(&name.as_str()) {
-                    }
                     return Err(format!(
                         "Undefined variable: {} at {}:{}",
                         name, tok.line, tok.column
@@ -256,15 +303,9 @@ impl Analyzer {
                         let _ = arg.ty.unify(&param_type)?;
                     }
 
-                    // check if function is one of the builtins
-                    if is_built_in(name.clone()) {
-                        return Err(format!(
-                            "Function {} is trying to replace a builtin",
-                            name,
-                        ));
-                    }
-
+                    // Set the type
                     expr.ty = *ret_type;
+
                 } else {
                     return Err(format!("{} is not a function", name));
                 }
@@ -345,7 +386,7 @@ impl Analyzer {
 }
 
 fn is_built_in(name: String) -> bool {
-    if DataType::Unknown != DataType::from(&name) {
+    if DataType::is_inbuilt_type(&name) {
         return true;
     }
     if INBUILT_FUNCTIONS.contains(&name.as_str()) {

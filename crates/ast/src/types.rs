@@ -53,6 +53,20 @@ impl DataType {
             },
         }
     }
+
+    pub fn is_inbuilt_type(name: &str) -> bool {
+        match name {
+            "u32" => true,
+            "u64" => true,
+            "i32" => true,
+            "i64" => true,
+            "f32" => true,
+            "f64" => true,
+            "str" => true,
+            "bool" => true,
+            _   => false,
+        }
+    }
 }
 
 impl DataType {
