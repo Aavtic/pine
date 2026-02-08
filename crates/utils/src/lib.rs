@@ -21,3 +21,19 @@ pub fn get_file_ptr(file_name: PathBuf) -> io::Result<fs::File> {
 pub fn append_to_file(file_ptr: &mut fs::File, data: &str) -> Result<(), std::io::Error> {
     writeln!(file_ptr, "{}", data)
 }
+
+pub fn get_all_files_in_dir(dir_path: &str) -> Vec<String> {
+    let mut result = Vec::new();
+    // read_dir returns an iterator, which can be looped through
+    for entry in fs::read_dir(dir_path).unwrap() {
+        let entry = entry.unwrap();
+        let path = entry.path();
+        
+        // Optional: filter to only show files, not directories or other types
+        if path.is_file() {
+            result.push(path.to_str().unwrap().to_string());
+        }
+    }
+
+    return result;
+}

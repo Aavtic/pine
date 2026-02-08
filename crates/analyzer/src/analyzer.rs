@@ -128,7 +128,7 @@ impl Analyzer {
                     Literal::Number(_) => expr.ty = DataType::I32,
                     Literal::Float(_) => expr.ty = DataType::F32,
                     Literal::Boolean(_) => expr.ty = DataType::Boolean,
-                    Literal::String(_) => expr.ty = DataType::String,
+                    Literal::String(_) => expr.ty = DataType::Str,
                     // It should have corresponding None representation in DataType
                     Literal::None => expr.ty = DataType::Void,
                 }
@@ -339,7 +339,6 @@ impl Analyzer {
             "i64" => DataType::I64,
             "u32" => DataType::U32,
             "u64" => DataType::U64,
-            "string" => DataType::String,
             _ => DataType::Unknown,
         }
     }
