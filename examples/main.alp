@@ -1,6 +1,12 @@
 fn main() {
-    let res = read("Are you a one or a zero?")
-    println(res)
+    let res = read("Are you a one or a zero?: ")
+
+    while true {
+        print("You are a ")
+        print(res)
+        println("!")
+    }
+
     return 0
 }
 

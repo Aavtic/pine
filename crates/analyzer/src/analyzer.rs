@@ -365,20 +365,12 @@ impl Analyzer {
                 }
 
                 let mut local_env = env.clone();
-                let mut while_type = DataType::Unit;
 
                 for stmt in body.iter_mut() {
-                    // Ignore return statement as they are terminals and they can return out of
-                    // this scope
-                    match stmt {
-                        Statement::Return(_) => {}
-                        _ => while_type = self.typecheck_statement(stmt, &mut local_env)?
-                    }
+                    self.typecheck_statement(stmt, &mut local_env)?;
                 }
 
-                if while_type != DataType::Unit {
-                    return Err(format!("Expected {} but got {}\nWhile loop cannot return any value", DataType::Unit.to_str(), while_type.to_str()));
-                }
+                expr.ty = DataType::Unit;
             }
         }
         Ok(())
