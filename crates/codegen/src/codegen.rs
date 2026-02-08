@@ -1019,6 +1019,18 @@ impl<'ctx> CodeGen<'ctx> {
                                 .unwrap()
                                 .as_basic_value_enum(),
 
+                            DataType::Str => {
+                                let strcmp_fn = self.get_or_create_runtime_function("pine_strcmp");
+                                let call = self
+                                    .builder
+                                    .build_call(strcmp_fn, &[l.into(), r.into()], "")
+                                    .unwrap();
+
+                                call.try_as_basic_value()
+                                    .unwrap_basic()
+                                    .into_int_value()
+                                    .as_basic_value_enum()
+                            }
 
                             _ => unimplemented!(),
                         };
@@ -1166,6 +1178,19 @@ impl<'ctx> CodeGen<'ctx> {
                                 )
                                 .unwrap()
                                 .as_basic_value_enum(),
+
+                            DataType::Str => {
+                                let strcmp_fn = self.get_or_create_runtime_function("pine_strcmp_ne");
+                                let call = self
+                                    .builder
+                                    .build_call(strcmp_fn, &[l.into(), r.into()], "")
+                                    .unwrap();
+
+                                call.try_as_basic_value()
+                                    .unwrap_basic()
+                                    .into_int_value()
+                                    .as_basic_value_enum()
+                            }
 
                             _ => unimplemented!(),
                         };
@@ -1497,23 +1522,22 @@ impl<'ctx> CodeGen<'ctx> {
             Literal::Boolean(b) => Ok(self.context.bool_type().const_int(b as u64, false).into()),
 
             Literal::String(str) => {
-                let global = unsafe {
-                    self.builder
-                        .build_global_string(&str, "const_str")
-                        .unwrap()
-                };
+                let global =
+                    unsafe { self.builder.build_global_string(&str, "const_str").unwrap() };
 
                 global.set_constant(true);
 
                 let zero = self.context.i32_type().const_zero();
 
                 let str_ptr = unsafe {
-                    self.builder.build_gep(
-                        global.get_value_type().into_array_type(), 
-                        global.as_pointer_value(),
-                        &[zero, zero],
-                        "str_ptr",
-                    ).unwrap()
+                    self.builder
+                        .build_gep(
+                            global.get_value_type().into_array_type(),
+                            global.as_pointer_value(),
+                            &[zero, zero],
+                            "str_ptr",
+                        )
+                        .unwrap()
                 };
 
                 Ok(str_ptr.as_basic_value_enum())
@@ -1591,7 +1615,7 @@ impl<'ctx> CodeGen<'ctx> {
                 DataType::F32 => llvm_type.into_float_type().as_basic_type_enum(),
                 DataType::F64 => llvm_type.into_float_type().as_basic_type_enum(),
                 DataType::Boolean => llvm_type.into_int_type().as_basic_type_enum(),
-                DataType::Str     => llvm_type.into_pointer_type().as_basic_type_enum(),
+                DataType::Str => llvm_type.into_pointer_type().as_basic_type_enum(),
 
                 _ => unimplemented!(),
             },
@@ -1627,5 +1651,27 @@ impl<'ctx> CodeGen<'ctx> {
             DataType::Pointer(_) => Ok(self.context.ptr_type(AddressSpace::default()).into()),
             _ => unimplemented!("{}", format!("{} is not implemented", typ.to_str())),
         }
+    }
+}
+
+// runtime helpers
+
+impl<'ctx> CodeGen<'ctx> {
+    fn get_or_create_runtime_function(&mut self, fn_name: &str) -> FunctionValue<'ctx> {
+        // Check if runtime pine_strcmp exists
+        return self.module.get_function(fn_name).unwrap_or_else(|| {
+                let fn_type = self.context.bool_type().fn_type(
+                    &[
+                        self.context
+                            .ptr_type(AddressSpace::default())
+                            .into(),
+                        self.context
+                            .ptr_type(AddressSpace::default())
+                            .into(),
+                    ],
+                    false,
+                );
+                self.module.add_function(fn_name, fn_type, None)
+            });
     }
 }

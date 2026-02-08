@@ -1,5 +1,15 @@
 fn main() {
-    let x: str = "Hello There";
-    x = "Hello friend"
-    return 0;
+    let s = "a";
+    let i = 0;
+
+    while i < 10 {
+        if s == "a" {
+            s = "b"
+        } else {
+            s = "a"
+        }
+        i = i + 1
+    }
+
+    return if s == "a" { 1 } else { 0 }
 }

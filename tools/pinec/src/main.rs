@@ -42,6 +42,7 @@ enum BuildMode {
     Tokens,
     Ast,
     Analyze,
+    Object,
     LlvmIr,
 }
 
@@ -66,6 +67,9 @@ fn main() {
                 }
                 Some(BuildMode::Analyze) => {
                     build_analyze(build.source_file)
+                }
+                Some(BuildMode::Object) => {
+                    build_object(build.source_file)
                 }
                 Some(BuildMode::LlvmIr) => {
                     build_llvm_ir(build.source_file)
@@ -155,6 +159,42 @@ fn build_llvm_ir(file: PathBuf) {
     }
 }
 
+fn build_object(file: PathBuf) {
+    let source = handle_reading_file(&file);
+    let tokens = lex(source.as_str());
+    let mut parser = Parser::new(tokens);
+    let mut ast = parser.parse().unwrap_or_else(|err| panic!("Couldn't parse the program due to: \n{}", err));
+
+    let file_name = file.to_str().unwrap();
+
+    let analyzer = Analyzer::new();
+    if let Err(err) = analyzer.analyze(&mut ast) {
+        eprintln!("Type Check failed due to:\n{}", err);
+        return
+    }
+
+    let module_name = file_name
+        .split(".")
+        .next()
+        .map(|n| n.to_string())
+        .unwrap_or(file_name.replace(".alp", ""));
+
+    let ctx = CodeGen::create_context();
+    let mut codegen = CodeGen::new(&ctx, &module_name);
+    //println!("{:#?}", &ast);
+
+    let module_ref = codegen.compile(&ast).unwrap_or_else(|err| panic!("Couldn't compile the program due to: \n{}", err));
+
+    // Don't verify object because they may not be complete
+    //if module_ref.verify().is_err() {
+    //    module_ref.print_to_stderr();
+    //    panic!("Invalid LLVM IR");
+    //}
+
+    linker::ObjectCompiler::compile_module(&module_ref, &module_name);
+    //linker::ObjectLinker::link(&module_name, &module_name).unwrap();
+}
+
 fn print_tokens(file: PathBuf) {
     let source = handle_reading_file(&file);
     let tokens = lex(source.as_str());
@@ -193,7 +233,7 @@ fn compile_program(file: PathBuf) {
     }
 
     linker::ObjectCompiler::compile_module(&module_ref, &module_name);
-    linker::ObjectLinker::link(&module_name, &module_name).unwrap();
+    linker::ObjectLinker::link(&module_name, &module_name, linker::ObjectLinker::compile_runtime(&module_name)).unwrap();
 }
 
 fn handle_reading_file(source: &PathBuf) -> String {
