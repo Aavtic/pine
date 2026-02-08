@@ -1,0 +1,10 @@
+alien "c" fn pine_println(s: str) -> i32
+
+fn println(s: str) -> i32 {
+    pine_println(s)
+}
+
+fn main() {
+    pine_println("Hello There!")
+    return 0
+}
