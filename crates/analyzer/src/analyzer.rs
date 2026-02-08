@@ -300,7 +300,7 @@ impl Analyzer {
 
                     for (arg, param_type) in args.iter_mut().zip(params) {
                         self.typecheck_expr(arg, env)?;
-                        let _ = arg.ty.unify(&param_type)?;
+                        let _ = param_type.unify(&arg.ty)?;
                     }
 
                     // Set the type
