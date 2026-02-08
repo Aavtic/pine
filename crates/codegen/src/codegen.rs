@@ -1032,6 +1032,27 @@ impl<'ctx> CodeGen<'ctx> {
                                     .as_basic_value_enum()
                             }
 
+                            DataType::String => {
+                                // Check if runtime pine_strcmp exists
+                                let strcmp_fn = self.module.get_function("pine_strcmp").unwrap_or_else(|| {
+                                    let fn_type = self.context.i32_type().fn_type(
+                                        &[self.context.ptr_type(AddressSpace::default()).into(), self.context.ptr_type(AddressSpace::default()).into()],
+                                        false
+                                        );
+                                    self.module.add_function("pine_strcmp", fn_type, None)
+                                });
+                                let call = self
+                                    .builder
+                                    .build_call(strcmp_fn, &[l.into(), r.into()], "")
+                                    .unwrap();
+
+                                call
+                                    .try_as_basic_value()
+                                    .unwrap_basic()
+                                    .into_int_value()
+                                    .as_basic_value_enum()
+                            }
+
                             _ => unimplemented!(),
                         };
 
