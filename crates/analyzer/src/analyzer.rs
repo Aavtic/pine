@@ -6,6 +6,8 @@ use std::collections::HashMap;
 
 pub type TypeEnv = HashMap<String, DataType>;
 
+pub const INBUILT_FUNCTIONS: [&str;1] = ["print"];
+
 pub struct Analyzer {}
 
 impl Analyzer {
@@ -138,6 +140,8 @@ impl Analyzer {
                 if let Some(ty) = env.get(name.as_str()) {
                     expr.ty = ty.clone();
                 } else {
+                    if INBUILT_FUNCTIONS.contains(&name.as_str()) {
+                    }
                     return Err(format!(
                         "Undefined variable: {} at {}:{}",
                         name, tok.line, tok.column
@@ -252,6 +256,14 @@ impl Analyzer {
                         let _ = arg.ty.unify(&param_type)?;
                     }
 
+                    // check if function is one of the builtins
+                    if is_built_in(name.clone()) {
+                        return Err(format!(
+                            "Function {} is trying to replace a builtin",
+                            name,
+                        ));
+                    }
+
                     expr.ty = *ret_type;
                 } else {
                     return Err(format!("{} is not a function", name));
@@ -330,6 +342,17 @@ impl Analyzer {
         }
         Ok(())
     }
+}
+
+fn is_built_in(name: String) -> bool {
+    if DataType::Unknown != DataType::from(&name) {
+        return true;
+    }
+    if INBUILT_FUNCTIONS.contains(&name.as_str()) {
+        return true;
+    }
+
+    return false;
 }
 
 impl Analyzer {

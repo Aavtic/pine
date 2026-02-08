@@ -2,6 +2,19 @@ use std::collections::HashMap;
 
 use crate::{function::Function, variable::Variable};
 
+use analyzer::analyzer::INBUILT_FUNCTIONS;
+
+pub const INBUILT_FUNCTIONS_TO_ABI: [&str;1] = ["pine_print"];
+
+// compile time assert
+macro_rules! const_assert {
+    ($x:expr) => {
+        const _: () = ::core::assert!($x);
+    };
+}
+const_assert!(INBUILT_FUNCTIONS.len() == INBUILT_FUNCTIONS_TO_ABI.len());
+
+
 use ast::{DataType, Expr, Literal, Statement};
 
 use inkwell::{
@@ -1020,7 +1033,10 @@ impl<'ctx> CodeGen<'ctx> {
                                 .as_basic_value_enum(),
 
                             DataType::Str => {
-                                let strcmp_fn = self.get_or_create_runtime_function("pine_strcmp");
+                                let strcmp_fn = self.get_or_create_runtime_function(
+                                    "pine_strcmp",
+                                    BasicTypeEnum::IntType(self.context.bool_type()),
+                                    &[ self.context.ptr_type(AddressSpace::default()).into(), self.context.ptr_type(AddressSpace::default()).into()]);
                                 let call = self
                                     .builder
                                     .build_call(strcmp_fn, &[l.into(), r.into()], "")
@@ -1180,8 +1196,10 @@ impl<'ctx> CodeGen<'ctx> {
                                 .as_basic_value_enum(),
 
                             DataType::Str => {
-                                let strcmp_fn =
-                                    self.get_or_create_runtime_function("pine_strcmp_ne");
+                                let strcmp_fn = self.get_or_create_runtime_function(
+                                    "pine_strcmp_ne",
+                                    BasicTypeEnum::IntType(self.context.bool_type()),
+                                    &[ self.context.ptr_type(AddressSpace::default()).into(), self.context.ptr_type(AddressSpace::default()).into()]);
                                 let call = self
                                     .builder
                                     .build_call(strcmp_fn, &[l.into(), r.into()], "")
@@ -1276,11 +1294,19 @@ impl<'ctx> CodeGen<'ctx> {
                 // TODO resolve callee
                 //let callee = self.compile_expression(callee.expr, Some(callee.ty))?;
 
-                let function = self
+                let function = if self.is_runtime_function(&name) {
+                    self.get_or_create_runtime_function(
+                        self.get_runtime_abi_name(&name),
+                        BasicTypeEnum::IntType(self.context.i32_type()),
+                        &[ self.context.ptr_type(AddressSpace::default()).into()] )
+                } else {
+                    self
                     .functions
                     .get(&name)
                     .cloned()
-                    .ok_or_else(|| format!("Undefined function: {}", name))?;
+                    .ok_or_else(|| {
+                        format!("Undefined function: {}", name)})?.value
+                };
 
                 let arg_values: Vec<BasicMetadataValueEnum> = args
                     .iter()
@@ -1292,7 +1318,7 @@ impl<'ctx> CodeGen<'ctx> {
 
                 let call = self
                     .builder
-                    .build_call(function.value, &arg_values, "call")
+                    .build_call(function, &arg_values, "call")
                     .unwrap();
 
                 Ok(call
@@ -1658,17 +1684,23 @@ impl<'ctx> CodeGen<'ctx> {
 // runtime helpers
 
 impl<'ctx> CodeGen<'ctx> {
-    fn get_or_create_runtime_function(&mut self, fn_name: &str) -> FunctionValue<'ctx> {
-        // Check if runtime pine_strcmp exists
+    fn get_or_create_runtime_function(&mut self, fn_name: &str, ret_type: BasicTypeEnum<'ctx>, param_types: &[BasicMetadataTypeEnum<'ctx>]) -> FunctionValue<'ctx> {
         return self.module.get_function(fn_name).unwrap_or_else(|| {
-            let fn_type = self.context.bool_type().fn_type(
-                &[
-                    self.context.ptr_type(AddressSpace::default()).into(),
-                    self.context.ptr_type(AddressSpace::default()).into(),
-                ],
+            let fn_type = ret_type.fn_type(
+                param_types,
                 false,
             );
             self.module.add_function(fn_name, fn_type, None)
         });
+    }
+
+    fn is_runtime_function(&self,name: &str) -> bool {
+        return INBUILT_FUNCTIONS.contains(&name);
+    }
+
+    fn get_runtime_abi_name(&self, name: &str) -> &'static str {
+        // Get the c abi name for inbuilt functions
+        // print -> pine_print -> c fn call
+        INBUILT_FUNCTIONS_TO_ABI[INBUILT_FUNCTIONS.iter().position(|&x| x == name).unwrap()]
     }
 }

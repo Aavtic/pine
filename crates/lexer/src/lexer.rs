@@ -62,7 +62,6 @@ pub enum TokenType {
     Else,
     While,
     Return,
-    PrintStmt,
 
     EOF, // Marks the end of token stream
 }
@@ -250,7 +249,6 @@ impl Tokenizer {
             "for" => self.add_token(TokenType::For, None),
             "while" => self.add_token(TokenType::While, None),
             "return" => self.add_token(TokenType::Return, None),
-            "print" => self.add_token(TokenType::PrintStmt, None),
             "None" =>  self.add_token(TokenType::None, None),
 
             // Identifiers
