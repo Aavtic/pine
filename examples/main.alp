@@ -1,8 +1,14 @@
-fn add(a: i32, b: i32) -> i32 {
-    return a + b
+//alien "c" fn pine_print(s: str) -> i32
+//alien "c" fn pine_println(s: str) -> i32
+
+fn print(s: str) -> i32 {
+    pine_print(s)
+}
+
+fn println(s: str) -> i32 {
+    pine_println(s)
 }
 
 fn main() {
-    let x = add(1, 2)
-    return 0
+    return print("Aadish the great!")
 }
