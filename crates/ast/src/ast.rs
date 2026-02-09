@@ -12,6 +12,7 @@ pub enum Statement {
     Assignment(Assign),
     Return(ReturnStmt),
     Break(BreakStmt),
+    Continue(ContinueStmt),
     Expr(TypedExpr),
 }
 
@@ -48,6 +49,9 @@ pub struct BreakStmt{
     //while loop because while loop may not even execute and won't produce value
     //pub value: Option<TypedExpr>
 }
+
+#[derive(Debug, Clone)]
+pub struct ContinueStmt{}
 
 #[derive(Debug, Clone)]
 pub struct FunctionDefinition {

@@ -1,32 +1,38 @@
 fn main() {
-    let state = ""
-    println("Welcome to the Pine Interpreter")
-    while state != "quit" {
-        println("first loop")
-        state = read(">>")
-        if state == "exit" {
-            while true {
-                println("second loop")
-                state = read(">>")
-                if state == "previous" {
-                    break
-                }
-            }
+    let a = 0
+
+    while a <= 100 {
+        a = a + 1
+        if a == 97 {
+            break
         }
-        println(state)
+        if a % 2 != 0 {
+            continue
+        }
+        print("Current Number: ")
+            println_d(a)
     }
-    println("Bye!")
 
     return 0
 }
 
 alien "c" fn pine_read_line_stdin(s: str) -> str
 alien "c" fn pine_println(s: str) -> i32
+alien "c" fn pine_print(s: str) -> i32
+alien "c" fn pine_println_int(d: i32) -> i32
 
 fn read(s: str) -> str {
     pine_read_line_stdin(s)
 }
 
+fn print(s: str) -> i32 {
+    pine_print(s)
+}
+
 fn println(s: str) -> i32 {
     pine_println(s)
+}
+
+fn println_d(d: i32) -> i32 {
+    pine_println_int(d)
 }
