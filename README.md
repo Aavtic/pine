@@ -1,6 +1,6 @@
 # 🌲 The Pine Programming Language
 
-Pine is a statically typed, LLVM-backed compiled programming language focused on high performance, minimal design, and a modern developer experience.
+Pine is a statically typed, compiled programming language focused on high performance, minimal design, and a modern developer experience.
 
 It features a clean syntax, explicit typing, LLVM-based code generation, and a transparent compilation pipeline that exposes every stage - from tokenization to native executable output.
 
