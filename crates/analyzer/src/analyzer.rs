@@ -121,10 +121,16 @@ impl Analyzer {
 
             Statement::Break(_) => {
                 if self.loop_nest_level > 0 {
-                    self.loop_nest_level -= 1;
                     return Ok(DataType::Unit);
                 }
                 Err(format!("Break statement is only allowed inside loop"))
+            }
+
+            Statement::Continue(_) => {
+                if self.loop_nest_level > 0 {
+                    return Ok(DataType::Unit);
+                }
+                Err(format!("Continue statement is only allowed inside loop"))
             }
 
             Statement::VariableDeclaration(vardecl) => {
