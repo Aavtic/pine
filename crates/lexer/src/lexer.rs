@@ -61,6 +61,8 @@ pub enum TokenType {
     If,
     Else,
     While,
+    Break,
+    Continue,
     Return,
     Alien,
 
@@ -249,6 +251,8 @@ impl Tokenizer {
             "else" => self.add_token(TokenType::Else, None),
             "for" => self.add_token(TokenType::For, None),
             "while" => self.add_token(TokenType::While, None),
+            "break" => self.add_token(TokenType::Break, None),
+            "continue" => self.add_token(TokenType::Continue, None),
             "return" => self.add_token(TokenType::Return, None),
             "alien" => self.add_token(TokenType::Alien, None),
             "None" =>  self.add_token(TokenType::None, None),

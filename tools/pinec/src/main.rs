@@ -38,11 +38,15 @@ struct BuildArgs {
 
 #[derive(Subcommand, Debug)]
 enum BuildMode {
-    /// Build the AST and write it as a DOT graph
+    /// Build the token stream
     Tokens,
+    /// Build the AST and write it as a DOT graph
     Ast,
+    /// Build the type checked AST
     Analyze,
+    /// Build the object file
     Object,
+    /// Build the llvm-ir code
     LlvmIr,
 }
 
@@ -115,7 +119,7 @@ fn build_analyze(file: PathBuf) {
     let mut parser = Parser::new(tokens);
     let mut ast = parser.parse().unwrap_or_else(|err| panic!("Couldn't parse the program due to: \n{}", err));
 
-    let analyzer = Analyzer::new();
+    let mut analyzer = Analyzer::new();
     if let Err(err) = analyzer.analyze(&mut ast) {
         eprintln!("Type Check failed due to:\n{}", err);
         return
@@ -133,7 +137,7 @@ fn build_llvm_ir(file: PathBuf) {
     let file_name = file.to_str().unwrap();
 
 
-    let analyzer = Analyzer::new();
+    let mut analyzer = Analyzer::new();
     if let Err(err) = analyzer.analyze(&mut ast) {
         eprintln!("Type Check failed due to:\n{}", err);
         return
@@ -167,7 +171,7 @@ fn build_object(file: PathBuf) {
 
     let file_name = file.to_str().unwrap();
 
-    let analyzer = Analyzer::new();
+    let mut analyzer = Analyzer::new();
     if let Err(err) = analyzer.analyze(&mut ast) {
         eprintln!("Type Check failed due to:\n{}", err);
         return
@@ -209,7 +213,7 @@ fn compile_program(file: PathBuf) {
 
     let file_name = file.to_str().unwrap();
 
-    let analyzer = Analyzer::new();
+    let mut analyzer = Analyzer::new();
     if let Err(err) = analyzer.analyze(&mut ast) {
         eprintln!("Type Check failed due to:\n{}", err);
         return

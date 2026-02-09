@@ -11,6 +11,7 @@ pub enum Statement {
     AlienDefinition(AlienDefinition),
     Assignment(Assign),
     Return(ReturnStmt),
+    Break(BreakStmt),
     Expr(TypedExpr),
 }
 
@@ -39,6 +40,13 @@ impl TypedExpr {
 #[derive(Debug, Clone)]
 pub struct ReturnStmt {
     pub value: Option<TypedExpr>
+}
+
+#[derive(Debug, Clone)]
+pub struct BreakStmt{
+    //not making break expr because it would only be safe for `loop {}` to be expr instead of 
+    //while loop because while loop may not even execute and won't produce value
+    //pub value: Option<TypedExpr>
 }
 
 #[derive(Debug, Clone)]
@@ -108,7 +116,7 @@ pub enum Expr {
     While {
         condition: Box<TypedExpr>,
         body: Vec<Statement>,
-    }
+    },
 }
 
 #[derive(Debug, Clone)]

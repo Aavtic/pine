@@ -39,6 +39,9 @@ pub struct CodeGen<'ctx> {
     functions: HashMap<String, Function<'ctx>>,
     //variables: HashMap<String, >
     current_fn: Option<Function<'ctx>>,
+
+    // maintain the loop stack (for use by continue and break)
+    loop_stack: Vec<(BasicBlock<'ctx>, BasicBlock<'ctx>)>,
 }
 
 impl<'ctx> CodeGen<'ctx> {
@@ -68,6 +71,7 @@ impl<'ctx> CodeGen<'ctx> {
 
         let variables = HashMap::new();
         let functions = HashMap::new();
+        let loop_stack = Vec::new();
         let current_fn = None;
 
         Self {
@@ -77,6 +81,7 @@ impl<'ctx> CodeGen<'ctx> {
             variables,
             functions,
             current_fn,
+            loop_stack,
         }
     }
 
@@ -308,6 +313,12 @@ impl<'ctx> CodeGen<'ctx> {
 
                     return Ok(None);
                 }
+            }
+
+            Statement::Break(_) => {
+                let (_, end_bb) = self.loop_stack.pop().unwrap();
+                self.builder.build_unconditional_branch(end_bb).unwrap();
+                Ok(None)
             }
 
             Statement::Expr(expr) => {
@@ -566,7 +577,7 @@ impl<'ctx> CodeGen<'ctx> {
                     BinaryOp::Or => {
                         return Ok(self
                             .builder
-                            .build_or(l.into_int_value(), r.into_int_value(), "and")
+                            .build_or(l.into_int_value(), r.into_int_value(), "or")
                             .unwrap()
                             .as_basic_value_enum());
                     }
@@ -1450,6 +1461,9 @@ impl<'ctx> CodeGen<'ctx> {
                     .context
                     .append_basic_block(function.value, "while_body");
                 let end_bb = self.context.append_basic_block(function.value, "while_end");
+
+                // save the loop controls for future use by continue or break
+                self.loop_stack.push((cond_bb, end_bb));
 
                 self.builder.build_unconditional_branch(cond_bb).unwrap();
 

@@ -8,16 +8,20 @@ pub type TypeEnv = HashMap<String, DataType>;
 
 pub const INBUILT_FUNCTIONS: [&str;2] = ["print", "println"];
 
-pub struct Analyzer {}
+pub struct Analyzer {
+    pub loop_nest_level: i32
+}
 
 impl Analyzer {
     pub fn new() -> Self {
-        return Self {};
+        return Self {
+            loop_nest_level: 0,
+        };
     }
 }
 
 impl Analyzer {
-    pub fn analyze(&self, ast: &mut Vec<Statement>) -> Result<(), String> {
+    pub fn analyze(&mut self, ast: &mut Vec<Statement>) -> Result<(), String> {
         let mut env = TypeEnv::new();
         // Pass 1: collect function signatures
         for statement in ast.iter() {
@@ -83,7 +87,7 @@ impl Analyzer {
     }
 
     fn typecheck_statement(
-        &self,
+        &mut self,
         stmt: &mut Statement,
         env: &mut TypeEnv,
     ) -> Result<DataType, String> {
@@ -113,6 +117,14 @@ impl Analyzer {
             Statement::Return(ret_stmt) => {
                 self.typecheck_expr(ret_stmt.value.as_mut().unwrap(), env)?;
                 Ok(ret_stmt.value.as_mut().unwrap().ty.clone())
+            }
+
+            Statement::Break(_) => {
+                if self.loop_nest_level > 0 {
+                    self.loop_nest_level -= 1;
+                    return Ok(DataType::Unit);
+                }
+                Err(format!("Break statement is only allowed inside loop"))
             }
 
             Statement::VariableDeclaration(vardecl) => {
@@ -171,7 +183,7 @@ impl Analyzer {
         }
     }
 
-    fn typecheck_expr(&self, expr: &mut ast::TypedExpr, env: &TypeEnv) -> Result<(), String> {
+    fn typecheck_expr(&mut self, expr: &mut ast::TypedExpr, env: &TypeEnv) -> Result<(), String> {
         match &mut expr.expr {
             Expr::Literal(lit) => {
                 match lit {
@@ -356,6 +368,8 @@ impl Analyzer {
                 condition,
                 body,
             } => {
+                // increment the loop nest
+                self.loop_nest_level += 1;
                 // Typecheck the condition
                 self.typecheck_expr(condition, env)?;
 
@@ -369,6 +383,8 @@ impl Analyzer {
                 for stmt in body.iter_mut() {
                     self.typecheck_statement(stmt, &mut local_env)?;
                 }
+
+                self.loop_nest_level -= 1;
 
                 expr.ty = DataType::Unit;
             }

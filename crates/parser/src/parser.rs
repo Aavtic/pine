@@ -124,6 +124,19 @@ impl Parser {
             }
         }
 
+        if matches_token!(self, TokenType::Break) {
+            match self.break_statement() {
+                Ok(break_stmt) => return Some(ast::Statement::Break(break_stmt)),
+                Err(err) => {
+                    self._report_error(err);
+                    self.print_current_error();
+                    self.synchronize();
+                    return None;
+                }
+            }
+        }
+
+
         if matches_token!(self, TokenType::Alien) {
             match self.alien_definition() {
                 Ok(aliendef) => return Some(ast::Statement::AlienDefinition(aliendef)),
@@ -358,6 +371,13 @@ impl Parser {
         }
 
         return Ok(ast::ReturnStmt { value: expr });
+    }
+
+    fn break_statement(&mut self) -> Result<ast::BreakStmt, ParseError> {
+        if self.check(TokenType::SemiColon) {
+            self.advance();
+        }
+        return Ok(ast::BreakStmt{});
     }
 
     fn var_declaration(&mut self) -> Result<ast::VarDecl, ParseError> {
