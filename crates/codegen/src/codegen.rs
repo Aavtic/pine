@@ -316,8 +316,14 @@ impl<'ctx> CodeGen<'ctx> {
             }
 
             Statement::Break(_) => {
-                let (_, end_bb) = self.loop_stack.pop().unwrap();
+                let (_, end_bb) = self.loop_stack.last().unwrap().clone();
                 self.builder.build_unconditional_branch(end_bb).unwrap();
+                Ok(None)
+            }
+
+            Statement::Continue(_) => {
+                let (cond_bb, _) = self.loop_stack.last().unwrap().clone();
+                self.builder.build_unconditional_branch(cond_bb).unwrap();
                 Ok(None)
             }
 
@@ -1501,6 +1507,9 @@ impl<'ctx> CodeGen<'ctx> {
                 {
                     self.builder.build_unconditional_branch(cond_bb).unwrap();
                 }
+
+
+                self.loop_stack.pop();
 
                 // End
                 self.builder.position_at_end(end_bb);
