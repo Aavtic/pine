@@ -1,7 +1,66 @@
 use lexer::lexer::{TokenType, Token};
 use std::convert::From;
+use std::collections::HashMap;
 use crate::DataType;
 
+// For use in the analyzer for type checking
+pub type TypeEnv = HashMap<String, DataType>;
+
+#[derive(Debug, Clone)]
+pub struct Module {
+    pub name: String,
+    pub ast: Vec<Statement>,
+    pub imports: TypeEnv,
+    pub exports: TypeEnv,
+    //pub lookup_table: 
+}
+
+#[derive(Debug, Clone)]
+pub struct CompilationUnit {
+    pub modules: HashMap<String, Module>,
+}
+
+impl CompilationUnit {
+    pub fn new() -> Self {
+        Self {
+            modules: HashMap::new(),
+        }
+    }
+    pub fn add_module(&mut self, name: String, module: Module) {
+        self.modules.insert(name, module);
+    }
+
+    pub fn get_module(&self, name: &str) -> Option<&Module> {
+        return self.modules.get(name);
+    }
+
+    pub fn get_module_mut(&mut self, name: &str) -> Option<&mut Module> {
+        self.modules.get_mut(name)
+    }
+}
+
+impl Module {
+    pub fn new(name: String,  ast: Vec<Statement>) -> Self {
+        Self {
+            name,
+            imports: TypeEnv::new(),
+            exports: TypeEnv::new(),
+            ast,
+        }
+    }
+
+    pub fn add_imports(&mut self, import: TypeEnv) {
+        for (key, val) in import {
+            self.imports.insert(key, val);
+        }
+    }
+
+    pub fn add_exports(&mut self, exports: TypeEnv) {
+        for (key, val) in exports {
+            self.exports.insert(key, val);
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub enum Statement {
@@ -10,6 +69,7 @@ pub enum Statement {
     // alien fn print(string) -> i23; similar to extern in rust
     AlienDefinition(AlienDefinition),
     Assignment(Assign),
+    Import(ImportStmt),
     Return(ReturnStmt),
     Break(BreakStmt),
     Continue(ContinueStmt),
@@ -36,6 +96,13 @@ impl TypedExpr {
             ty: DataType::Unknown,
         }
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct ImportStmt {
+    pub import_name: String,
+    // TODO: add alias,
+    // import a as b
 }
 
 #[derive(Debug, Clone)]
@@ -107,6 +174,13 @@ pub enum Expr {
     FunctionCall {
         // Temp. For prototyping
         name: String,
+        callee: Box<TypedExpr>,
+        args:   Vec<TypedExpr>,
+    },
+
+    // Just a single level method call: a.b()
+    MethodCall {
+        call_namespace: Vec<String>,
         callee: Box<TypedExpr>,
         args:   Vec<TypedExpr>,
     },
@@ -265,6 +339,7 @@ impl Expr {
             Expr::Grouping(_expr) =>            "Grouping",
             Expr::Variable{..} =>               "Variable",
             Expr::FunctionCall{..} =>           "Function call",
+            Expr::MethodCall{..} =>             "Method call",
             Expr::If{..} =>                     "if",
             Expr::While{..} =>                  "while",
         }
