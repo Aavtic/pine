@@ -12,7 +12,7 @@ pub enum DataType {
     Void,
     Unit,
     Boolean,
-    Function {params: Vec<DataType>, ret_type: Box<DataType>},
+    Function {params: Vec<(String, DataType)>, ret_type: Box<DataType>},
     // For passing ast without type check
     Unknown,
 }
@@ -101,10 +101,11 @@ impl DataType {
                 }
             ) => {
                 let params: Result<Vec<_>, _> =
-                    p1.iter().zip(p2.iter()).map(|(a, b)| a.unify(b)).collect();
+                    p1.iter().zip(p2.iter()).map(|(a, b)| a.1.unify(&b.1)).collect();
+                let params = params.unwrap();
                 let ret = r1.unify(r2)?;
                 Ok(DataType::Function {
-                    params: params?,
+                    params: p2.iter().zip(params).map(|a| (a.0.0.clone(), a.1)).collect(),
                     ret_type: Box::new(ret),
                 })
             }
