@@ -168,12 +168,22 @@ fn build_llvm_ir(file: PathBuf) {
 
     let ctx = CodeGen::create_context();
     let mut codegen_mod = CodeGenModules::new();
-    codegen_mod.compile(&ctx, compilation_unit.clone(), false);
+    let modules =  codegen_mod.compile(&ctx, compilation_unit.clone(), false)
+        .unwrap_or_else(|err| {
+            eprintln!("ERROR When compiling:");
+            panic!("{:?}", err);
+    });
 
-    //module_ref.print_to_stderr();
-    //if module_ref.verify().is_err() {
-    //    panic!("Invalid LLVM IR");
-    //}
+    for (name, module) in modules {
+        println!(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>");
+        println!("[+] INFO: {}", name);
+        module.print_to_stderr();
+        if module.verify().is_err() {
+            panic!("Invalid LLVM IR");
+        }
+        println!(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>");
+    }
+
 }
 
 fn build_object(file: PathBuf) {
@@ -206,7 +216,15 @@ fn build_object(file: PathBuf) {
 
     let ctx = CodeGen::create_context();
     let mut codegen_mod = CodeGenModules::new();
-    codegen_mod.compile(&ctx, compilation_unit.clone(), false);
+    let modules =  codegen_mod.compile(&ctx, compilation_unit.clone(), false)
+        .unwrap_or_else(|err| {
+            eprintln!("ERROR When compiling:");
+            panic!("{:?}", err);
+    });
+
+    for (name, module) in modules {
+        linker::ObjectCompiler::compile_module(&module, &name, file.parent().unwrap());
+    }
 
     // Don't verify object because they may not be complete
     //if module_ref.verify().is_err() {
