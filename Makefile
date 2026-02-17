@@ -28,6 +28,9 @@ debug_install: debug_build
 	sudo cp -rn stdlib/* $(LIB_DIR)/
 	sudo ln -sfv $(BIN_DIR)/$(BINARY) $(SYMLINK)
 
+update_stdlib:
+	sudo cp -r stdlib/* $(LIB_DIR)/
+
 clean:
 	cargo clean
 

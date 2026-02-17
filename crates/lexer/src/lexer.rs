@@ -52,7 +52,7 @@ pub enum TokenType {
 
     // Keywords
     Fn,
-    Import,
+    Use,
     True,
     False,
     None,
@@ -243,7 +243,7 @@ impl Tokenizer {
         match token.as_str() {
             // Keywords
             "fn" => self.add_token(TokenType::Fn, None),
-            "import" => self.add_token(TokenType::Import, None),
+            "use" => self.add_token(TokenType::Use, None),
             "true" => self.add_token(TokenType::True, None),
             "false" => self.add_token(TokenType::False, None),
             "let" => self.add_token(TokenType::Let, None),

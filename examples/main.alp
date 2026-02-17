@@ -1,10 +1,11 @@
-import math
-import io
+use io
+use math
+use local;
+use "github.com/aavtic/std";
 
 fn main() {
-    let x = 10
-    let a = square(x)
-    print("Hello There!")
-
-    return a
+    let x = 2
+    let result = cube(x)
+    print(greeting())
+    return result
 }

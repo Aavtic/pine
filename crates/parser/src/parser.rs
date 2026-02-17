@@ -4,7 +4,7 @@ use lexer::lexer::{Object, Token, TokenType};
 use config::{stdlib, constants};
 
 use std::fmt;
-use std::path::{PathBuf, Path};
+use std::path::PathBuf;
 use utils::handle_reading_file;
 
 #[derive(Debug, Clone)]
@@ -157,7 +157,7 @@ impl Parser {
             }
         }
 
-        if matches_token!(self, TokenType::Import) {
+        if matches_token!(self, TokenType::Use) {
             match self.import_statement() {
                 Ok(import_stmt) => return Some(ast::Statement::Import(import_stmt)),
                 Err(err) => {
@@ -988,7 +988,7 @@ impl Parser {
 
             if matches!(
                 self.peek().token_type,
-                TokenType::Import
+                TokenType::Use
                     | TokenType::Let
                     | TokenType::For
                     | TokenType::While
