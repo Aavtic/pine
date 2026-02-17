@@ -52,7 +52,7 @@ pub enum TokenType {
 
     // Keywords
     Fn,
-    Include,
+    Import,
     True,
     False,
     None,
@@ -216,7 +216,7 @@ impl Tokenizer {
         while self.peek().is_numeric() || self.peek() == '.' {
             if self.peek() == '.' {
                 if found_decimal {
-                    break
+                    break;
                 } else {
                     found_decimal = true
                 }
@@ -243,7 +243,7 @@ impl Tokenizer {
         match token.as_str() {
             // Keywords
             "fn" => self.add_token(TokenType::Fn, None),
-            "include" => self.add_token(TokenType::Include, None),
+            "import" => self.add_token(TokenType::Import, None),
             "true" => self.add_token(TokenType::True, None),
             "false" => self.add_token(TokenType::False, None),
             "let" => self.add_token(TokenType::Let, None),
@@ -255,7 +255,7 @@ impl Tokenizer {
             "continue" => self.add_token(TokenType::Continue, None),
             "return" => self.add_token(TokenType::Return, None),
             "alien" => self.add_token(TokenType::Alien, None),
-            "None" =>  self.add_token(TokenType::None, None),
+            "None" => self.add_token(TokenType::None, None),
 
             // Identifiers
             _ => self.add_token(TokenType::Identifier, None),
@@ -281,7 +281,7 @@ impl Tokenizer {
                 } else {
                     self.add_token(TokenType::Minus, None)
                 }
-            },
+            }
             '*' => self.add_token(TokenType::Star, None),
             '/' => self.add_token(TokenType::Slash, None),
             '%' => self.add_token(TokenType::Mod, None),

@@ -1,9 +1,11 @@
 use ast::DataType;
 //use ast::ast;
 use lexer::lexer::{Object, Token, TokenType};
+use config::{stdlib, constants};
 
 use std::fmt;
-use std::path::PathBuf;
+use std::path::{PathBuf, Path};
+use utils::handle_reading_file;
 
 #[derive(Debug, Clone)]
 #[allow(unused)]
@@ -41,23 +43,42 @@ macro_rules! matches_token {
 }
 
 pub struct Parser {
+    compilation_unit: ast::CompilationUnit,
     tokens: Vec<Token>,
     errors: Vec<ParseError>,
     current: usize,
     contains_parse_error: bool,
+
+    // file information
+    project_dir: PathBuf,
 }
 
 impl Parser {
-    pub fn new(tokens: Vec<Token>) -> Self {
+    pub fn new(tokens: Vec<Token>, project_dir: PathBuf) -> Self {
         Self {
+            compilation_unit: ast::CompilationUnit::new(),
             tokens,
             errors: Vec::new(),
             current: 0,
             contains_parse_error: false,
+            project_dir,
         }
     }
 
-    pub fn parse(&mut self) -> Result<Vec<ast::Statement>, ParseError> {
+    pub fn get_compilation_unit(&self) -> &ast::CompilationUnit {
+        return &self.compilation_unit;
+    }
+
+    fn reset(&mut self, tokens: Vec<Token>) {
+        self.tokens = tokens;
+        self.errors =  Vec::new();
+        self.current = 0;
+        self.contains_parse_error = false;
+    }
+}
+
+impl Parser {
+    pub fn parse(&mut self, module_name: &str) -> Result<(), ParseError> {
         let mut statements = Vec::new();
         while !self.is_end() {
             match self.statement() {
@@ -65,7 +86,31 @@ impl Parser {
                 None => {}
             }
         }
-        Ok(statements)
+
+        // add to compilation_unit
+        let module = ast::Module::new(module_name.into(), statements.clone());
+        self.compilation_unit.add_module(module_name.into(), module);
+
+        // Get all the import statements and parse them
+        for statement in &statements {
+            if let ast::Statement::Import(stmt) = statement {
+                let file_name = {
+                    if self.project_dir.join(stmt.import_name.clone() + constants::PINE_EXTENSION).exists() {
+                        self.project_dir.join(stmt.import_name.clone() + constants::PINE_EXTENSION)
+                    } else if stdlib::stdlib_path().join(stmt.import_name.clone() + constants::PINE_EXTENSION).exists() {
+                        stdlib::stdlib_path().join(stmt.import_name.clone() + constants::PINE_EXTENSION)
+                    } else {
+                        return Err(ParseError::ParseError(format!("Could not find module: {}. Not part of standard library or present in current directory", stmt.import_name.clone()), 69, 69));
+                    }
+                };
+                let source = handle_reading_file(&std::path::PathBuf::from(file_name));
+                let tokens = lexer::lexer::lex(&source);
+                self.reset(tokens);
+                self.parse(&stmt.import_name)?;
+            }
+        }
+
+        Ok(())
     }
 
     pub fn dump_ast(&self, ast: Vec<ast::Statement>, out_file: PathBuf) {
@@ -112,6 +157,18 @@ impl Parser {
             }
         }
 
+        if matches_token!(self, TokenType::Import) {
+            match self.import_statement() {
+                Ok(import_stmt) => return Some(ast::Statement::Import(import_stmt)),
+                Err(err) => {
+                    self._report_error(err);
+                    self.print_current_error();
+                    self.synchronize();
+                    return None;
+                }
+            }
+        }
+
         if matches_token!(self, TokenType::Return) {
             match self.return_statement() {
                 Ok(ret_stmt) => return Some(ast::Statement::Return(ret_stmt)),
@@ -147,7 +204,6 @@ impl Parser {
                 }
             }
         }
-
 
         if matches_token!(self, TokenType::Alien) {
             match self.alien_definition() {
@@ -337,7 +393,6 @@ impl Parser {
                 data_type = DataType::from(&datatype_lexeme);
             }
             arguments.push((identifier.lexeme.to_string(), data_type));
-
         }
 
         self.consume(
@@ -367,12 +422,27 @@ impl Parser {
             self.advance();
         }
 
-        return Ok(ast::AlienDefinition{
+        return Ok(ast::AlienDefinition {
             abi_name: abi_name.lexeme,
             fn_name: fn_name.lexeme,
             ret_type: return_type,
             fn_arguments: arguments,
         });
+    }
+
+    fn import_statement(&mut self) -> Result<ast::ImportStmt, ParseError> {
+        let import_name = self
+            .consume(
+                TokenType::Identifier,
+                "import value expected after `import` statement",
+            )?
+            .lexeme;
+
+        if self.check(TokenType::SemiColon) {
+            self.advance();
+        }
+
+        return Ok(ast::ImportStmt { import_name });
     }
 
     fn return_statement(&mut self) -> Result<ast::ReturnStmt, ParseError> {
@@ -389,14 +459,14 @@ impl Parser {
         if self.check(TokenType::SemiColon) {
             self.advance();
         }
-        return Ok(ast::BreakStmt{});
+        return Ok(ast::BreakStmt {});
     }
 
     fn continue_stmt(&mut self) -> Result<ast::ContinueStmt, ParseError> {
         if self.check(TokenType::SemiColon) {
             self.advance();
         }
-        return Ok(ast::ContinueStmt{});
+        return Ok(ast::ContinueStmt {});
     }
 
     fn var_declaration(&mut self) -> Result<ast::VarDecl, ParseError> {
@@ -678,6 +748,8 @@ impl Parser {
         loop {
             if matches_token!(self, TokenType::OpenPara) {
                 expr = self.finish_call(expr.unwrap(), name.clone());
+            } else if matches_token!(self, TokenType::Dot) {
+                expr = self.method_call(expr.unwrap(), name.clone());
             } else {
                 break;
             }
@@ -709,6 +781,45 @@ impl Parser {
             name,
             callee: Box::new(ast::TypedExpr::unknown(callee)),
             args: arguments,
+        });
+    }
+
+    // single level
+    fn method_call(
+        &mut self,
+        callee: ast::Expr,
+        module_name: String,
+    ) -> Result<ast::Expr, ParseError> {
+        let mut names = Vec::new();
+        names.push(module_name.clone());
+        names.push(
+            self.consume(TokenType::Identifier, "expected function name after `.`")?
+                .lexeme,
+        );
+
+        while self.check(TokenType::Dot) {
+            self.advance();
+            names.push(
+                self.consume(TokenType::Identifier, "expected function name after `.`")?
+                    .lexeme,
+            );
+        }
+
+        let function_name: String = names.last().unwrap().into();
+
+        self.consume(TokenType::OpenPara, "Expected `(` after method name")?;
+
+        let call = self.finish_call(callee.clone(), function_name.clone())?;
+
+        let args = match call {
+            ast::Expr::FunctionCall { args, .. } => args,
+            _ => unreachable!(),
+        };
+
+        return Ok(ast::Expr::MethodCall {
+            call_namespace: names,
+            callee: Box::new(ast::TypedExpr::unknown(callee)),
+            args,
         });
     }
 
@@ -877,7 +988,7 @@ impl Parser {
 
             if matches!(
                 self.peek().token_type,
-                TokenType::Include
+                TokenType::Import
                     | TokenType::Let
                     | TokenType::For
                     | TokenType::While

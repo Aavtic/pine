@@ -1,4 +1,5 @@
 use std::{io::Error, process::Output};
+use std::path::{Path, PathBuf}; 
 use utils::get_all_files_in_dir;
 
 use inkwell::{
@@ -11,7 +12,7 @@ pub struct ObjectCompiler;
 pub struct ObjectLinker;
 
 impl ObjectCompiler {
-    pub fn compile_module(module: &Module, name: &str) {
+    pub fn compile_module(module: &Module, name: &str, output_dir: &Path) -> PathBuf {
         const OPTIMIZATION_LEVEL: OptimizationLevel = OptimizationLevel::Aggressive;
         const RELOC_MODE: RelocMode = RelocMode::PIC;
         const CODE_MODEL: CodeModel = CodeModel::Large;
@@ -29,40 +30,50 @@ impl ObjectCompiler {
         ).unwrap();
 
         let output_name = format!("{}.o", name);
-        let output_path = std::path::Path::new(&output_name);
-        target_machine.write_to_file(module, FileType::Object, output_path).unwrap();
+        let output_path = output_dir.join(std::path::Path::new(&output_name));
+        target_machine.write_to_file(module, FileType::Object, &output_path).unwrap();
+        return output_path;
     }
 }
 
 impl ObjectLinker {
-    pub fn link(module_name: &str, output: &str, runtime_objects: Option<Vec<String>>) -> Result<Output, Error> {
+    pub fn link(output: &str, object_files: Vec<PathBuf>, runtime_objects: Option<Vec<String>>) -> Result<Output, Error> {
         let mut output_path = output.to_string();
         if cfg!(windows) && !output.contains(".exe") {
             output_path = format!("{}.exe", output_path);
         }
 
+        let mut obj_files: Vec<String> = object_files.iter().map(|obj| obj.to_str().unwrap().to_string()).collect();
+
         if let Some(runtime_objs) = runtime_objects {
-            let input = format!("{}.o", module_name);
-            let linker_output = std::process::Command::new("cc")
-                .arg(input.clone())
-                .args(runtime_objs)
-                .arg("-o")
-                .arg(output_path)
-                .output();
-
-            std::fs::remove_file(input).expect("Unable to delete object file");
-            linker_output
-        } else {
-            let input = format!("{}.o", module_name);
-            let linker_output = std::process::Command::new("cc")
-                .arg(input.clone())
-                .arg("-o")
-                .arg(output_path)
-                .output();
-
-            std::fs::remove_file(input).expect("Unable to delete object file");
-            linker_output
+            obj_files.extend(runtime_objs);
         }
+
+        println!("Building {}",  output_path);
+        //let input = format!("{}.o", module_name);
+        let linker_output = std::process::Command::new("cc")
+            .args(obj_files.clone())
+            .arg("-o")
+            .arg(output_path)
+            .output();
+
+        for obj_file in obj_files {
+            std::fs::remove_file(obj_file).expect("Unable to delete object file");
+        }
+
+        linker_output
+
+        //} else {
+        //    let input = format!("{}.o", module_name);
+        //    let linker_output = std::process::Command::new("cc")
+        //        .arg(input.clone())
+        //        .arg("-o")
+        //        .arg(output_path)
+        //        .output();
+        //
+        //    //std::fs::remove_file(input).expect("Unable to delete object file");
+        //    linker_output
+        //}
     }
 
     // output is only used to identify if it is windows or linux

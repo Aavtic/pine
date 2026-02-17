@@ -1,44 +1,98 @@
 use ast::Statement;
 use ast::types::DataType;
-use ast::{BinaryOp, Expr, Literal, UnaryOp};
+use ast::{BinaryOp, Expr, Literal, TypeEnv, UnaryOp};
 
-use std::collections::HashMap;
-
-pub type TypeEnv = HashMap<String, DataType>;
-
-pub const INBUILT_FUNCTIONS: [&str;2] = ["print", "println"];
+pub const INBUILT_FUNCTIONS: [&str; 2] = ["print", "println"];
 
 pub struct Analyzer {
-    pub loop_nest_level: i32
+    pub loop_nest_level: i32,
+    pub imports: TypeEnv,
+    pub exports: TypeEnv,
 }
 
 impl Analyzer {
     pub fn new() -> Self {
         return Self {
             loop_nest_level: 0,
+            imports: TypeEnv::new(),
+            exports: TypeEnv::new(),
         };
+    }
+
+    pub fn reset(&mut self) {
+        self.loop_nest_level = 0;
+        self.imports = TypeEnv::new();
+        self.exports = TypeEnv::new();
+    }
+
+    pub fn start_analysis(
+        &mut self,
+        compilation_unit: &mut ast::CompilationUnit,
+    ) -> Result<(), String> {
+        // populate exports for each module
+        for (_, module) in compilation_unit.modules.iter_mut() {
+            self.analyze(&mut module.ast, TypeEnv::new(), true)?;
+            let exports = self.get_exports();
+            module.add_exports(exports);
+            self.reset();
+        }
+
+        // populate imports for each module
+        let compilation_unit_clone = compilation_unit.clone();
+        for (_, module) in compilation_unit.modules.iter_mut() {
+            for stmt in module.ast.clone().iter() {
+                if let ast::Statement::Import(import_stmt) = stmt {
+                    let module_name = import_stmt.import_name.clone();
+                    if let Some(import_module) = compilation_unit_clone.get_module(&module_name) {
+                        let imports = import_module.exports.clone();
+                        module.add_imports(imports);
+                    } else {
+                        return Err(format!("Could not find module: {}", module_name));
+                    }
+                }
+            }
+        }
+
+        // analyze every modules
+        for (_, module) in compilation_unit.modules.iter_mut() {
+            self.analyze(&mut module.ast, module.imports.clone(), false)?;
+            self.reset();
+        }
+
+        Ok(())
     }
 }
 
 impl Analyzer {
-    pub fn analyze(&mut self, ast: &mut Vec<Statement>) -> Result<(), String> {
+    pub fn analyze(
+        &mut self,
+        ast: &mut Vec<Statement>,
+        imports: TypeEnv,
+        only_exports: bool,
+    ) -> Result<(), String> {
         let mut env = TypeEnv::new();
+        self.imports = imports;
+        // part of exports
         // Pass 1: collect function signatures
         for statement in ast.iter() {
             if let Statement::FunctionDefinition(fndef) = statement {
                 let fndef = fndef.clone();
                 let name = fndef.fn_name.lexeme;
-                let params = fndef.fn_arguments;
                 let return_type = fndef.ret_type;
 
-                let param_types: Vec<DataType> = params.iter().map(|x| x.1.clone()).collect();
+                //let param_types: Vec<DataType> = params.iter().map(|x| x.1.clone()).collect();
                 let func_type = DataType::Function {
-                    params: param_types,
+                    params: fndef.fn_arguments,
                     ret_type: Box::new(return_type.clone()),
                 };
 
                 env.insert(name, func_type);
             }
+        }
+
+        if only_exports {
+            self.exports = env.clone();
+            return Ok(());
         }
 
         // Pass 2: collect alien function signatures
@@ -49,27 +103,8 @@ impl Analyzer {
                 let params = fndef.fn_arguments;
                 let return_type = fndef.ret_type;
 
-                let param_types: Vec<DataType> = params.iter().map(|x| x.1.clone()).collect();
                 let func_type = DataType::Function {
-                    params: param_types,
-                    ret_type: Box::new(return_type.clone()),
-                };
-
-                env.insert(name, func_type);
-            }
-        }
-
-        // Pass 3 add inbuilt function signatures
-
-        for statement in ast.iter() {
-            if let Statement::FunctionDefinition(fndef) = statement {
-                let fndef = fndef.clone(); let name = fndef.fn_name.lexeme;
-                let params = fndef.fn_arguments;
-                let return_type = fndef.ret_type;
-
-                let param_types: Vec<DataType> = params.iter().map(|x| x.1.clone()).collect();
-                let func_type = DataType::Function {
-                    params: param_types,
+                    params,
                     ret_type: Box::new(return_type.clone()),
                 };
 
@@ -78,11 +113,11 @@ impl Analyzer {
         }
 
         // Pass 4 Type check each statement
-
         for stmt in ast.iter_mut() {
             self.typecheck_statement(stmt, &mut env)?;
         }
 
+        self.exports = env.clone();
         Ok(())
     }
 
@@ -159,7 +194,7 @@ impl Analyzer {
                     let _ = ty.unify(&assign.value.ty)?;
                     // Ah, Uh..No variable decl must return unit
                     //return Ok(ty.clone());
-                    return Ok(DataType::Unit)
+                    return Ok(DataType::Unit);
                 } else {
                     // TODO: Pass the line, col here
                     return Err(format!(
@@ -170,21 +205,26 @@ impl Analyzer {
             }
 
             Statement::AlienDefinition(aliendef) => {
-                // ensure none of types are unknown 
+                // ensure none of types are unknown
                 for (_, typ) in aliendef.fn_arguments.iter() {
                     if typ == &DataType::Unknown {
-                    return Err(format!(
-                        "alien function param cannot be Unknown: {} is Unknown",
-                        typ.to_str()
-                    ));
+                        return Err(format!(
+                            "alien function param cannot be Unknown: {} is Unknown",
+                            typ.to_str()
+                        ));
                     }
                 }
-                return Ok(DataType::Unit)
+                return Ok(DataType::Unit);
             }
 
             Statement::Expr(ex) => {
                 self.typecheck_expr(ex, env)?;
                 Ok(ex.ty.clone())
+            }
+
+            Statement::Import(import_stmt) => {
+                // TODO: Implement type check
+                Ok(DataType::Unit)
             }
         }
     }
@@ -205,6 +245,8 @@ impl Analyzer {
             // Have a dedicated Variable type in Parser. This is leaking from phase 1
             Expr::Variable { name, tok } => {
                 if let Some(ty) = env.get(name.as_str()) {
+                    expr.ty = ty.clone();
+                } else if let Some(ty) = self.imports.get(name.as_str()) {
                     expr.ty = ty.clone();
                 } else {
                     return Err(format!(
@@ -245,15 +287,19 @@ impl Analyzer {
                 self.typecheck_expr(right, env)?;
 
                 match op {
-                    BinaryOp::Plus | BinaryOp::Minus | BinaryOp::Star | BinaryOp::Slash | BinaryOp::Mod => {
-                        if left.ty != right.ty && (
-                            left.ty != DataType::I32
-                            || right.ty != DataType::I64
-                            || right.ty != DataType::U32
-                            || right.ty != DataType::U64
-                            || right.ty != DataType::F32
-                            || right.ty != DataType::F64 )
-                            {
+                    BinaryOp::Plus
+                    | BinaryOp::Minus
+                    | BinaryOp::Star
+                    | BinaryOp::Slash
+                    | BinaryOp::Mod => {
+                        if left.ty != right.ty
+                            && (left.ty != DataType::I32
+                                || right.ty != DataType::I64
+                                || right.ty != DataType::U32
+                                || right.ty != DataType::U64
+                                || right.ty != DataType::F32
+                                || right.ty != DataType::F64)
+                        {
                             return Err(format!(
                                 "Binary Operation requires int | float operands, got {} and {}",
                                 left.ty.to_str(),
@@ -266,11 +312,11 @@ impl Analyzer {
                     | BinaryOp::Greater
                     | BinaryOp::LesserEqual
                     | BinaryOp::GreaterEqual => {
-                        if !((left.ty == DataType::I32 && right.ty == DataType::I32) || 
-                            (left.ty == DataType::I64 && right.ty == DataType::I64) ||
-                            (left.ty == DataType::F32 && right.ty == DataType::F32) ||
-                            (left.ty == DataType::F64 && right.ty == DataType::F64)
-                            ) {
+                        if !((left.ty == DataType::I32 && right.ty == DataType::I32)
+                            || (left.ty == DataType::I64 && right.ty == DataType::I64)
+                            || (left.ty == DataType::F32 && right.ty == DataType::F32)
+                            || (left.ty == DataType::F64 && right.ty == DataType::F64))
+                        {
                             return Err(format!(
                                 "Invalid comparison operands. got {} and {}",
                                 left.ty.to_str(),
@@ -283,9 +329,9 @@ impl Analyzer {
                     BinaryOp::And | BinaryOp::Or => {
                         if left.ty != DataType::Boolean || right.ty != DataType::Boolean {
                             return Err(format!(
-                                    "Logical operators can only operate on `bool` type. got {} and {}",
-                                    left.ty.to_str(),
-                                    right.ty.to_str()
+                                "Logical operators can only operate on `bool` type. got {} and {}",
+                                left.ty.to_str(),
+                                right.ty.to_str()
                             ));
                         }
                         expr.ty = DataType::Boolean
@@ -301,10 +347,17 @@ impl Analyzer {
             Expr::FunctionCall { name, callee, args } => {
                 self.typecheck_expr(callee, env)?;
 
-                let func_type = env
-                    .get(name)
-                    .ok_or_else(|| format!("Undefined function: {}", name))?
-                    .clone();
+                let func_type = {
+                    // check if function exists in current file
+                    if env.get(name).is_some() {
+                        env.get(name).unwrap().clone()
+                    // Otherwise check if it is imported
+                    } else if self.imports.get(name).is_some() {
+                        self.imports.get(name).unwrap().clone()
+                    } else {
+                        return Err(format!("Undefined function: {}", name));
+                    }
+                };
 
                 if let DataType::Function { params, ret_type } = func_type {
                     if args.len() != params.len() {
@@ -316,17 +369,21 @@ impl Analyzer {
                         ));
                     }
 
-                    for (arg, param_type) in args.iter_mut().zip(params) {
+                    for (arg, param) in args.iter_mut().zip(params) {
                         self.typecheck_expr(arg, env)?;
-                        let _ = param_type.unify(&arg.ty)?;
+                        let _ = param.1.unify(&arg.ty)?;
                     }
 
                     // Set the type
                     expr.ty = *ret_type;
-
                 } else {
                     return Err(format!("{} is not a function", name));
                 }
+            }
+
+            Expr::MethodCall { .. } => {
+                // Todo
+                eprintln!("INFO: method call analysis is not done");
             }
 
             Expr::Grouping(ex) => {
@@ -344,7 +401,9 @@ impl Analyzer {
                 if condition.ty != DataType::Boolean {
                     // Worst error message
                     // Improve this
-                    return Err(format!("Only Expressions resolving to a boolean is allowed in if condition"));
+                    return Err(format!(
+                        "Only Expressions resolving to a boolean is allowed in if condition"
+                    ));
                 }
 
                 let mut if_block_env = env.clone();
@@ -361,19 +420,22 @@ impl Analyzer {
                     for stmt in else_block.as_mut().unwrap().iter_mut() {
                         else_expr_ty = self.typecheck_statement(stmt, &mut else_block_env)?;
                     }
-                } else { else_expr_ty = if_expr_ty.clone() }
+                } else {
+                    else_expr_ty = if_expr_ty.clone()
+                }
 
                 if if_expr_ty != else_expr_ty {
-                    return Err(format!("If and else block return mismatched types.\nIf block -> {}\nElse block -> {}", if_expr_ty.to_str(), else_expr_ty.to_str()));
+                    return Err(format!(
+                        "If and else block return mismatched types.\nIf block -> {}\nElse block -> {}",
+                        if_expr_ty.to_str(),
+                        else_expr_ty.to_str()
+                    ));
                 }
 
                 expr.ty = if_expr_ty.clone();
             }
 
-            Expr::While {
-                condition,
-                body,
-            } => {
+            Expr::While { condition, body } => {
                 // increment the loop nest
                 self.loop_nest_level += 1;
                 // Typecheck the condition
@@ -381,7 +443,9 @@ impl Analyzer {
 
                 // Verify that it resolves to boolean
                 if condition.ty != DataType::Boolean {
-                    return Err(format!("Only Expressions resolving to a boolean is allowed in while condition"));
+                    return Err(format!(
+                        "Only Expressions resolving to a boolean is allowed in while condition"
+                    ));
                 }
 
                 let mut local_env = env.clone();
@@ -396,6 +460,16 @@ impl Analyzer {
             }
         }
         Ok(())
+    }
+}
+
+impl Analyzer {
+    fn get_imports(&self) -> TypeEnv {
+        self.imports.clone()
+    }
+
+    fn get_exports(&self) -> TypeEnv {
+        self.exports.clone()
     }
 }
 

@@ -4,7 +4,7 @@ use crate::{function::Function, variable::Variable};
 
 use analyzer::analyzer::INBUILT_FUNCTIONS;
 
-pub const INBUILT_FUNCTIONS_TO_ABI: [&str;2] = ["pine_print", "pine_println"];
+pub const INBUILT_FUNCTIONS_TO_ABI: [&str; 2] = ["pine_print", "pine_println"];
 
 // compile time assert
 macro_rules! const_assert {
@@ -14,8 +14,7 @@ macro_rules! const_assert {
 }
 const_assert!(INBUILT_FUNCTIONS.len() == INBUILT_FUNCTIONS_TO_ABI.len());
 
-
-use ast::{DataType, Expr, Literal, Statement};
+use ast::{DataType, Expr, Literal, Statement, TypeEnv};
 
 use inkwell::{
     AddressSpace, FloatPredicate, IntPredicate,
@@ -23,12 +22,53 @@ use inkwell::{
     builder::Builder,
     context::Context,
     module::Module,
-    types::IntType,
     types::{BasicMetadataTypeEnum, BasicType, BasicTypeEnum, FunctionType},
     values::{
         BasicMetadataValueEnum, BasicValue, BasicValueEnum, FunctionValue, IntValue, PointerValue,
     },
 };
+
+pub struct CodeGenModules<'ctx> {
+    pub modules: HashMap<String, CodeGen<'ctx>>,
+    compilation_order: Vec<String>,
+}
+
+impl<'ctx> CodeGenModules<'ctx> {
+    pub fn new() -> Self {
+        return Self {
+            modules: HashMap::new(),
+            compilation_order: Vec::new(),
+        }
+    }
+
+    fn insert_module(&mut self, name: &str, codegen: CodeGen<'ctx>) {
+        self.modules.insert(name.to_string(), codegen);
+    }
+
+    fn get_module(&self, name: &str) -> Option<&CodeGen<'ctx>> {
+        return self.modules.get(name.into())
+    }
+}
+
+impl<'ctx> CodeGenModules<'ctx> {
+    pub fn compile(&mut self, ctx: &'ctx Context, compilation_unit: ast::CompilationUnit,  _parallel_compilation: bool) -> Result<Vec<(String, Module<'ctx>)>, String> {
+        let mut modules = Vec::new();
+        // compile all modules
+
+        for (module_name, module) in compilation_unit.modules {
+            let mut codegen = CodeGen::new(&ctx, &module_name);
+            let ast = module.ast;
+            let imports = module.imports;
+            let module_ref = codegen.compile(&ast, imports).unwrap_or_else(|err| panic!("Couldn't compile the program due to: \n{}", err));
+            if module_ref.verify().is_err() {
+                module_ref.print_to_stderr();
+                panic!("Invalid LLVM IR");
+            }
+            modules.push((module_name, module_ref.clone()));
+        }
+        return Ok(modules);
+    }
+}
 
 pub struct CodeGen<'ctx> {
     context: &'ctx Context,
@@ -37,6 +77,7 @@ pub struct CodeGen<'ctx> {
 
     variables: HashMap<String, Variable<'ctx>>,
     functions: HashMap<String, Function<'ctx>>,
+    imports:   TypeEnv,
     //variables: HashMap<String, >
     current_fn: Option<Function<'ctx>>,
 
@@ -71,6 +112,7 @@ impl<'ctx> CodeGen<'ctx> {
 
         let variables = HashMap::new();
         let functions = HashMap::new();
+        let imports =   TypeEnv::new();
         let loop_stack = Vec::new();
         let current_fn = None;
 
@@ -80,12 +122,13 @@ impl<'ctx> CodeGen<'ctx> {
             module,
             variables,
             functions,
+            imports,
             current_fn,
             loop_stack,
         }
     }
 
-    pub fn compile(&mut self, statements: &Vec<Statement>) -> Result<&Module<'ctx>, String> {
+    pub fn compile(&mut self, statements: &Vec<Statement>, imports: TypeEnv) -> Result<&Module<'ctx>, String> {
         // Phase 1 delcare all functions
         for statement in statements {
             if let Statement::FunctionDefinition(fndef) = statement {
@@ -101,7 +144,7 @@ impl<'ctx> CodeGen<'ctx> {
                     .unwrap();
             }
         }
-        
+
         // Phase 2 declare all alien functions
         for statement in statements {
             if let Statement::AlienDefinition(aliendef) = statement {
@@ -118,7 +161,23 @@ impl<'ctx> CodeGen<'ctx> {
             }
         }
 
-        // Phase 3
+        // Phase 3 Declare all the imported functions
+        for (name, ty) in imports {
+            if let DataType::Function{params, ret_type} = ty {
+                let mut input: Vec<(String, DataType)> = Vec::new();
+                let ret_type = ret_type.clone();
+
+                for arg in params {
+                    input.push((arg.0.clone(), arg.1.clone()))
+                }
+
+
+                self.declare_function(&name, input.as_slice(), &ret_type)
+                    .unwrap();
+            }
+        }
+
+        // Phase 4 Compile all statements
         for statement in statements {
             if let Statement::FunctionDefinition(_) = statement {
                 self.compile_statement(statement, None)?;
@@ -187,10 +246,7 @@ impl<'ctx> CodeGen<'ctx> {
 
                 // Allocate parameters
                 for (i, (name, datatype)) in fndef.fn_arguments.iter().enumerate() {
-                    let param_value = function
-                        .value
-                        .get_nth_param(i as u32)
-                        .unwrap();
+                    let param_value = function.value.get_nth_param(i as u32).unwrap();
                     let datatype = datatype.clone();
                     let alloca = self
                         .create_entry_block_alloca(&function.value, name, &datatype)
@@ -330,6 +386,10 @@ impl<'ctx> CodeGen<'ctx> {
             Statement::Expr(expr) => {
                 let value = self.compile_expression(expr.expr.clone(), Some(expr.ty.clone()))?;
                 return Ok(Some(value.as_basic_value_enum()));
+            }
+
+            Statement::Import(importStmt) => {
+                todo!();
             }
         }
     }
@@ -1068,7 +1128,11 @@ impl<'ctx> CodeGen<'ctx> {
                                 let strcmp_fn = self.get_or_create_runtime_function(
                                     "pine_strcmp",
                                     BasicTypeEnum::IntType(self.context.bool_type()),
-                                    &[ self.context.ptr_type(AddressSpace::default()).into(), self.context.ptr_type(AddressSpace::default()).into()]);
+                                    &[
+                                        self.context.ptr_type(AddressSpace::default()).into(),
+                                        self.context.ptr_type(AddressSpace::default()).into(),
+                                    ],
+                                );
                                 let call = self
                                     .builder
                                     .build_call(strcmp_fn, &[l.into(), r.into()], "")
@@ -1231,7 +1295,11 @@ impl<'ctx> CodeGen<'ctx> {
                                 let strcmp_fn = self.get_or_create_runtime_function(
                                     "pine_strcmp_ne",
                                     BasicTypeEnum::IntType(self.context.bool_type()),
-                                    &[ self.context.ptr_type(AddressSpace::default()).into(), self.context.ptr_type(AddressSpace::default()).into()]);
+                                    &[
+                                        self.context.ptr_type(AddressSpace::default()).into(),
+                                        self.context.ptr_type(AddressSpace::default()).into(),
+                                    ],
+                                );
                                 let call = self
                                     .builder
                                     .build_call(strcmp_fn, &[l.into(), r.into()], "")
@@ -1336,8 +1404,8 @@ impl<'ctx> CodeGen<'ctx> {
                     .functions
                     .get(&name)
                     .cloned()
-                    .ok_or_else(|| {
-                        format!("Undefined function: {}", name)})?.value;
+                    .ok_or_else(|| format!("Undefined function: {}", name))?
+                    .value;
                 //};
 
                 let arg_values: Vec<BasicMetadataValueEnum> = args
@@ -1358,6 +1426,8 @@ impl<'ctx> CodeGen<'ctx> {
                     .unwrap_basic()
                     .as_basic_value_enum())
             }
+
+            Expr::MethodCall{..} => unimplemented!(),
 
             Expr::If {
                 condition,
@@ -1508,7 +1578,6 @@ impl<'ctx> CodeGen<'ctx> {
                     self.builder.build_unconditional_branch(cond_bb).unwrap();
                 }
 
-
                 self.loop_stack.pop();
 
                 // End
@@ -1609,8 +1678,11 @@ impl<'ctx> CodeGen<'ctx> {
             _ => unimplemented!(),
         }
     }
+}
 
-    fn create_main_function(&mut self) {}
+impl<'ctx> CodeGen<'ctx> {
+    pub fn get_all_imports(&mut self, cgen_modules: &mut CodeGenModules) {
+    }
 }
 
 impl<'ctx> CodeGen<'ctx> {
@@ -1721,17 +1793,19 @@ impl<'ctx> CodeGen<'ctx> {
 // runtime helpers
 
 impl<'ctx> CodeGen<'ctx> {
-    fn get_or_create_runtime_function(&mut self, fn_name: &str, ret_type: BasicTypeEnum<'ctx>, param_types: &[BasicMetadataTypeEnum<'ctx>]) -> FunctionValue<'ctx> {
+    fn get_or_create_runtime_function(
+        &mut self,
+        fn_name: &str,
+        ret_type: BasicTypeEnum<'ctx>,
+        param_types: &[BasicMetadataTypeEnum<'ctx>],
+    ) -> FunctionValue<'ctx> {
         return self.module.get_function(fn_name).unwrap_or_else(|| {
-            let fn_type = ret_type.fn_type(
-                param_types,
-                false,
-            );
+            let fn_type = ret_type.fn_type(param_types, false);
             self.module.add_function(fn_name, fn_type, None)
         });
     }
 
-    fn is_runtime_function(&self,name: &str) -> bool {
+    fn is_runtime_function(&self, name: &str) -> bool {
         return INBUILT_FUNCTIONS.contains(&name);
     }
 
