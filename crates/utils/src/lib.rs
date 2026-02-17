@@ -37,3 +37,12 @@ pub fn get_all_files_in_dir(dir_path: &str) -> Vec<String> {
 
     return result;
 }
+
+pub fn handle_reading_file(source: &PathBuf) -> String {
+    match read_from_file(source) {
+        Ok(contents) => return contents,
+        Err(e) => {
+            panic!("ERROR: Could not open file: {} due to: {}", source.to_str().unwrap(), e);
+        }
+    }
+}

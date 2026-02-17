@@ -6,12 +6,12 @@ use clap::{Args, Subcommand};
 use lexer::lexer::{Token, lex};
 use parser::parser::Parser;
 use analyzer::analyzer::Analyzer;
-use codegen::codegen::CodeGen;
+use codegen::codegen::{CodeGen, CodeGenModules};
 use linker::linker;
 
-use utils::read_from_file;
+use utils::handle_reading_file;
 
-/// Alphera Compiler
+/// Pine Compiler
 #[derive(ClapParser, Debug)]
 #[clap(version)]
 struct CMDArgs {
@@ -83,62 +83,74 @@ fn main() {
     }
 }
 
-fn _print_ast_to_dot(source: PathBuf, out_file: PathBuf) {
-    let source = handle_reading_file(&source);
+fn _print_ast_to_dot(source_path: PathBuf, out_file: PathBuf) {
+    let source = handle_reading_file(&source_path);
     let tokens = lex(source.as_str());
-    let mut parser = Parser::new(tokens);
-    let res = parser.parse();
-    match res {
-        Ok(ast) => {
-            parser.dump_ast(ast, out_file);
-        }
-        Err(err) => {
-            eprintln!("{}", err);
-        }
-    }
+    let parent = PathBuf::from(source_path.parent().expect("Unable to find parent for source file"));
+    let mut parser = Parser::new(tokens, parent);
+
+    parser.parse("main").unwrap_or_else(|err| panic!("Couldn't parse the program due to: \n{}", err));
+    let mut ast = parser.get_compilation_unit().get_module("main").unwrap().ast.clone();
+
+    unimplemented!();
+
+    //match ast {
+    //    Ok(ast) => {
+    //        parser.dump_ast(ast, out_file);
+    //    }
+    //    Err(err) => {
+    //        eprintln!("{}", err);
+    //    }
+    //}
 }
 
-fn build_ast(source: PathBuf) {
-    let source = handle_reading_file(&source);
+fn build_ast(source_path: PathBuf) {
+    let source = handle_reading_file(&source_path);
     let tokens = lex(source.as_str());
-    let mut parser = Parser::new(tokens);
-    let res = parser.parse();
-    match res {
-        Ok(ast) => {
-            println!("{:#?}", ast)
-        }
-        Err(err) => {
-            eprintln!("{}", err);
-        }
-    }
+    let parent = PathBuf::from(source_path.parent().expect("Unable to find parent for source file"));
+    let mut parser = Parser::new(tokens, parent);
+
+    parser.parse("main").unwrap_or_else(|err| panic!("Couldn't parse the program due to: \n{}", err));
+    let ast = parser.get_compilation_unit();
+
+    println!("{:#?}", ast);
 }
 
 fn build_analyze(file: PathBuf) {
     let source = handle_reading_file(&file);
     let tokens = lex(source.as_str());
-    let mut parser = Parser::new(tokens);
-    let mut ast = parser.parse().unwrap_or_else(|err| panic!("Couldn't parse the program due to: \n{}", err));
+    let parent = PathBuf::from(file.parent().expect("Unable to find parent for source file"));
+    let mut parser = Parser::new(tokens, parent);
+    parser.parse("main").unwrap_or_else(|err| panic!("Couldn't parse the program due to: \n{}", err));
+
+    //let mut ast = parser.get_compilation_unit().get_module("main").unwrap().ast.clone();
+    let mut compilation_unit = parser.get_compilation_unit().clone();
+
+    let file_name = file.to_str().unwrap();
 
     let mut analyzer = Analyzer::new();
-    if let Err(err) = analyzer.analyze(&mut ast) {
+    if let Err(err) = analyzer.start_analysis(&mut compilation_unit) {
         eprintln!("Type Check failed due to:\n{}", err);
         return
     }
 
-    println!("{:#?}", ast)
+    println!("{:#?}", compilation_unit);
 }
 
 fn build_llvm_ir(file: PathBuf) {
     let source = handle_reading_file(&file);
     let tokens = lex(source.as_str());
-    let mut parser = Parser::new(tokens);
-    let mut ast = parser.parse().unwrap_or_else(|err| panic!("Couldn't parse the program due to: \n{}", err));
-    //
+    let parent = PathBuf::from(file.parent().expect("Unable to find parent for source file"));
+    let mut parser = Parser::new(tokens, parent);
+    parser.parse("main").unwrap_or_else(|err| panic!("Couldn't parse the program due to: \n{}", err));
+
+    //let mut ast = parser.get_compilation_unit().get_module("main").unwrap().ast.clone();
+    let mut compilation_unit = parser.get_compilation_unit().clone();
+
     let file_name = file.to_str().unwrap();
 
-
     let mut analyzer = Analyzer::new();
-    if let Err(err) = analyzer.analyze(&mut ast) {
+    if let Err(err) = analyzer.start_analysis(&mut compilation_unit) {
         eprintln!("Type Check failed due to:\n{}", err);
         return
     }
@@ -150,29 +162,34 @@ fn build_llvm_ir(file: PathBuf) {
         .unwrap_or(file_name.replace(".alp", ""));
 
 
-
     let ctx = CodeGen::create_context();
     let mut codegen = CodeGen::new(&ctx, &module_name);
     //println!("{:#?}", &ast);
 
-    let module_ref = codegen.compile(&ast).unwrap_or_else(|err| panic!("Couldn't compile the program due to: \n{}", err));
+    let ctx = CodeGen::create_context();
+    let mut codegen_mod = CodeGenModules::new();
+    codegen_mod.compile(&ctx, compilation_unit.clone(), false);
 
-    module_ref.print_to_stderr();
-    if module_ref.verify().is_err() {
-        panic!("Invalid LLVM IR");
-    }
+    //module_ref.print_to_stderr();
+    //if module_ref.verify().is_err() {
+    //    panic!("Invalid LLVM IR");
+    //}
 }
 
 fn build_object(file: PathBuf) {
     let source = handle_reading_file(&file);
     let tokens = lex(source.as_str());
-    let mut parser = Parser::new(tokens);
-    let mut ast = parser.parse().unwrap_or_else(|err| panic!("Couldn't parse the program due to: \n{}", err));
+    let parent = PathBuf::from(file.parent().expect("Unable to find parent for source file"));
+    let mut parser = Parser::new(tokens, parent);
+    parser.parse("main").unwrap_or_else(|err| panic!("Couldn't parse the program due to: \n{}", err));
+
+    //let mut ast = parser.get_compilation_unit().get_module("main").unwrap().ast.clone();
+    let mut compilation_unit = parser.get_compilation_unit().clone();
 
     let file_name = file.to_str().unwrap();
 
     let mut analyzer = Analyzer::new();
-    if let Err(err) = analyzer.analyze(&mut ast) {
+    if let Err(err) = analyzer.start_analysis(&mut compilation_unit) {
         eprintln!("Type Check failed due to:\n{}", err);
         return
     }
@@ -187,7 +204,9 @@ fn build_object(file: PathBuf) {
     let mut codegen = CodeGen::new(&ctx, &module_name);
     //println!("{:#?}", &ast);
 
-    let module_ref = codegen.compile(&ast).unwrap_or_else(|err| panic!("Couldn't compile the program due to: \n{}", err));
+    let ctx = CodeGen::create_context();
+    let mut codegen_mod = CodeGenModules::new();
+    codegen_mod.compile(&ctx, compilation_unit.clone(), false);
 
     // Don't verify object because they may not be complete
     //if module_ref.verify().is_err() {
@@ -195,7 +214,7 @@ fn build_object(file: PathBuf) {
     //    panic!("Invalid LLVM IR");
     //}
 
-    linker::ObjectCompiler::compile_module(&module_ref, &module_name);
+    //linker::ObjectCompiler::compile_module(&module_ref, &module_name);
     //linker::ObjectLinker::link(&module_name, &module_name).unwrap();
 }
 
@@ -208,13 +227,17 @@ fn print_tokens(file: PathBuf) {
 fn compile_program(file: PathBuf) {
     let source = handle_reading_file(&file);
     let tokens = lex(source.as_str());
-    let mut parser = Parser::new(tokens);
-    let mut ast = parser.parse().unwrap_or_else(|err| panic!("Couldn't parse the program due to: \n{}", err));
+    let parent = PathBuf::from(file.parent().expect("Unable to find parent for source file"));
+    let mut parser = Parser::new(tokens, parent);
+    parser.parse("main").unwrap_or_else(|err| panic!("Couldn't parse the program due to: \n{}", err));
+
+    //let mut ast = parser.get_compilation_unit().get_module("main").unwrap().ast.clone();
+    let mut compilation_unit = parser.get_compilation_unit().clone();
 
     let file_name = file.to_str().unwrap();
 
     let mut analyzer = Analyzer::new();
-    if let Err(err) = analyzer.analyze(&mut ast) {
+    if let Err(err) = analyzer.start_analysis(&mut compilation_unit) {
         eprintln!("Type Check failed due to:\n{}", err);
         return
     }
@@ -225,28 +248,23 @@ fn compile_program(file: PathBuf) {
         .map(|n| n.to_string())
         .unwrap_or(file_name.replace(".alp", ""));
 
+
     let ctx = CodeGen::create_context();
-    let mut codegen = CodeGen::new(&ctx, &module_name);
-    //println!("{:#?}", &ast);
+    let mut codegen_mod = CodeGenModules::new();
+    let modules =  codegen_mod.compile(&ctx, compilation_unit.clone(), false)
+        .unwrap_or_else(|err| {
+            eprintln!("ERROR When compiling:");
+            panic!("{:?}", err);
+    });
 
-    let module_ref = codegen.compile(&ast).unwrap_or_else(|err| panic!("Couldn't compile the program due to: \n{}", err));
 
-    if module_ref.verify().is_err() {
-        module_ref.print_to_stderr();
-        panic!("Invalid LLVM IR");
+    let mut object_files = Vec::new();
+    for (module_name, module_ref) in modules {
+        println!("Compiling {}", module_name);
+        let obj_file = linker::ObjectCompiler::compile_module(&module_ref, &module_name, file.parent().unwrap());
+        object_files.push(obj_file);
     }
-
-    linker::ObjectCompiler::compile_module(&module_ref, &module_name);
-    linker::ObjectLinker::link(&module_name, &module_name, linker::ObjectLinker::compile_runtime(&module_name)).unwrap();
-}
-
-fn handle_reading_file(source: &PathBuf) -> String {
-    match read_from_file(source) {
-        Ok(contents) => return contents,
-        Err(e) => {
-            panic!("ERROR: Could not open file due to: {}", e);
-        }
-    }
+    linker::ObjectLinker::link(&module_name, object_files, linker::ObjectLinker::compile_runtime(&module_name)).unwrap();
 }
 
 fn _print_tokens(tokens: Vec<Token>) {

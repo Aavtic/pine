@@ -1,38 +1,10 @@
+import math
+import io
+
 fn main() {
-    let a = 0
+    let x = 10
+    let a = square(x)
+    print("Hello There!")
 
-    while a <= 100 {
-        a = a + 1
-        if a == 97 {
-            break
-        }
-        if a % 2 != 0 {
-            continue
-        }
-        print("Current Number: ")
-            println_d(a)
-    }
-
-    return 0
-}
-
-alien "c" fn pine_read_line_stdin(s: str) -> str
-alien "c" fn pine_println(s: str) -> i32
-alien "c" fn pine_print(s: str) -> i32
-alien "c" fn pine_println_int(d: i32) -> i32
-
-fn read(s: str) -> str {
-    pine_read_line_stdin(s)
-}
-
-fn print(s: str) -> i32 {
-    pine_print(s)
-}
-
-fn println(s: str) -> i32 {
-    pine_println(s)
-}
-
-fn println_d(d: i32) -> i32 {
-    pine_println_int(d)
+    return a
 }
