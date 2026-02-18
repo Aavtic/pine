@@ -1,11 +1,12 @@
 use io
 use math
-use local;
-use "github.com/aavtic/std";
 
 fn main() {
-    let x = 2
-    let result = cube(x)
-    print(greeting())
-    return result
+    let number = 3
+    let result = math.square(number)
+
+    io.print("The square of 3 is: ")
+    io.printd(result)
+
+    return 0
 }

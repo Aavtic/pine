@@ -37,7 +37,7 @@ impl ObjectCompiler {
 }
 
 impl ObjectLinker {
-    pub fn link(output: &str, object_files: Vec<PathBuf>, runtime_objects: Option<Vec<String>>) -> Result<Output, Error> {
+    pub fn link(output: &str, object_files: Vec<PathBuf>, runtime_objects: Option<Vec<String>>) -> Result<std::process::ExitStatus, Error> {
         let mut output_path = output.to_string();
         if cfg!(windows) && !output.contains(".exe") {
             output_path = format!("{}.exe", output_path);
@@ -55,13 +55,14 @@ impl ObjectLinker {
             .args(obj_files.clone())
             .arg("-o")
             .arg(output_path)
-            .output();
+            .status();
 
         for obj_file in obj_files {
             std::fs::remove_file(obj_file).expect("Unable to delete object file");
         }
 
         linker_output
+        
 
         //} else {
         //    let input = format!("{}.o", module_name);

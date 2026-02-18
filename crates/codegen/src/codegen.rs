@@ -14,7 +14,7 @@ macro_rules! const_assert {
 }
 const_assert!(INBUILT_FUNCTIONS.len() == INBUILT_FUNCTIONS_TO_ABI.len());
 
-use ast::{DataType, Expr, Literal, Statement, TypeEnv};
+use ast::{DataType, Expr, ImportType, Literal, ModuleEnum, Statement, TypeEnv};
 
 use inkwell::{
     AddressSpace, FloatPredicate, IntPredicate,
@@ -38,7 +38,7 @@ impl<'ctx> CodeGenModules<'ctx> {
         return Self {
             modules: HashMap::new(),
             compilation_order: Vec::new(),
-        }
+        };
     }
 
     fn insert_module(&mut self, name: &str, codegen: CodeGen<'ctx>) {
@@ -46,25 +46,34 @@ impl<'ctx> CodeGenModules<'ctx> {
     }
 
     fn get_module(&self, name: &str) -> Option<&CodeGen<'ctx>> {
-        return self.modules.get(name.into())
+        return self.modules.get(name.into());
     }
 }
 
 impl<'ctx> CodeGenModules<'ctx> {
-    pub fn compile(&mut self, ctx: &'ctx Context, compilation_unit: ast::CompilationUnit,  _parallel_compilation: bool) -> Result<Vec<(String, Module<'ctx>)>, String> {
+    pub fn compile(
+        &mut self,
+        ctx: &'ctx Context,
+        compilation_unit: ast::CompilationUnit,
+        _parallel_compilation: bool,
+    ) -> Result<Vec<(String, Module<'ctx>)>, String> {
         let mut modules = Vec::new();
         // compile all modules
 
         for (module_name, module) in compilation_unit.modules {
-            let mut codegen = CodeGen::new(&ctx, &module_name);
-            let ast = module.ast;
-            let imports = module.imports;
-            let module_ref = codegen.compile(&ast, imports).unwrap_or_else(|err| panic!("Couldn't compile the program due to: \n{}", err));
-            if module_ref.verify().is_err() {
-                module_ref.print_to_stderr();
-                panic!("Invalid LLVM IR");
+            if let ModuleEnum::Module(module) = module {
+                let mut codegen = CodeGen::new(&ctx, &module_name);
+                let ast = module.ast;
+                let imports = module.imports;
+                let module_ref = codegen
+                    .compile(&ast, imports)
+                    .unwrap_or_else(|err| panic!("Couldn't compile the program due to: \n{}", err));
+                if module_ref.verify().is_err() {
+                    module_ref.print_to_stderr();
+                    panic!("Invalid LLVM IR");
+                }
+                modules.push((module_name, module_ref.clone()));
             }
-            modules.push((module_name, module_ref.clone()));
         }
         return Ok(modules);
     }
@@ -77,7 +86,7 @@ pub struct CodeGen<'ctx> {
 
     variables: HashMap<String, Variable<'ctx>>,
     functions: HashMap<String, Function<'ctx>>,
-    imports:   TypeEnv,
+    imports: ImportType,
     //variables: HashMap<String, >
     current_fn: Option<Function<'ctx>>,
 
@@ -112,7 +121,7 @@ impl<'ctx> CodeGen<'ctx> {
 
         let variables = HashMap::new();
         let functions = HashMap::new();
-        let imports =   TypeEnv::new();
+        let imports = ImportType::new();
         let loop_stack = Vec::new();
         let current_fn = None;
 
@@ -128,7 +137,15 @@ impl<'ctx> CodeGen<'ctx> {
         }
     }
 
-    pub fn compile(&mut self, statements: &Vec<Statement>, imports: TypeEnv) -> Result<&Module<'ctx>, String> {
+    pub fn compile(
+        &mut self,
+        statements: &Vec<Statement>,
+        imports: ImportType,
+    ) -> Result<&Module<'ctx>, String> {
+        // Populate all the imports
+        // To Only declare them, on demand
+        self.imports = imports;
+
         // Phase 1 delcare all functions
         for statement in statements {
             if let Statement::FunctionDefinition(fndef) = statement {
@@ -140,8 +157,13 @@ impl<'ctx> CodeGen<'ctx> {
                     input.push((arg.0.clone(), arg.1.clone()))
                 }
 
-                self.declare_function(fn_name, input.as_slice(), &ret_type)
-                    .unwrap();
+                self.declare_function(
+                    &self.heirarchial_fn_name(self.module.get_name().to_str().unwrap(), fn_name),
+                    input.as_slice(),
+                    &ret_type,
+                    false,
+                )
+                .unwrap();
             }
         }
 
@@ -156,26 +178,33 @@ impl<'ctx> CodeGen<'ctx> {
                     input.push((arg.0.clone(), arg.1.clone()))
                 }
 
-                self.declare_function(fn_name, input.as_slice(), &ret_type)
-                    .unwrap();
+                self.declare_function(
+                    &fn_name,
+                    input.as_slice(),
+                    &ret_type,
+                    true,
+                )
+                .unwrap();
             }
         }
 
-        // Phase 3 Declare all the imported functions
-        for (name, ty) in imports {
-            if let DataType::Function{params, ret_type} = ty {
-                let mut input: Vec<(String, DataType)> = Vec::new();
-                let ret_type = ret_type.clone();
-
-                for arg in params {
-                    input.push((arg.0.clone(), arg.1.clone()))
-                }
-
-
-                self.declare_function(&name, input.as_slice(), &ret_type)
-                    .unwrap();
-            }
-        }
+        //// Phase 3 Declare all the imported functions
+        //for (imp_name, imp_ty) in imports {
+        //    for (name, ty) in imp_ty {
+        //        if let DataType::Function{params, ret_type} = ty {
+        //            let mut input: Vec<(String, DataType)> = Vec::new();
+        //            let ret_type = ret_type.clone();
+        //
+        //            for arg in params {
+        //                input.push((arg.0.clone(), arg.1.clone()))
+        //            }
+        //
+        //
+        //            self.declare_function(&name, input.as_slice(), &ret_type)
+        //                .unwrap();
+        //        }
+        //    }
+        //}
 
         // Phase 4 Compile all statements
         for statement in statements {
@@ -228,9 +257,14 @@ impl<'ctx> CodeGen<'ctx> {
                 let fn_name = fndef.fn_name.clone();
 
                 // Check if function is declared before
+                //let function = self
+                //    .functions
+                //    .get(&fn_name.lexeme)
                 let function = self
-                    .functions
-                    .get(&fn_name.lexeme)
+                    .get_function(&self.heirarchial_fn_name(
+                        self.module.get_name().to_str().unwrap(),
+                        &fn_name.lexeme,
+                    ))
                     .cloned()
                     .ok_or_else(|| format!("Function {} is not declared", fn_name.lexeme))?;
 
@@ -1400,13 +1434,23 @@ impl<'ctx> CodeGen<'ctx> {
                 //        BasicTypeEnum::IntType(self.context.i32_type()),
                 //        &[ self.context.ptr_type(AddressSpace::default()).into()] )
                 //} else {
-                let function = self
-                    .functions
-                    .get(&name)
-                    .cloned()
-                    .ok_or_else(|| format!("Undefined function: {}", name))?
-                    .value;
-                //};
+                let function = {
+                    if self.check_is_function_alien(&name).is_some() {
+                        self.get_function(&name)
+                            .unwrap()
+                            .value
+                    } else {
+                        self
+                            //.functions
+                            //.get(&name)
+                            .get_function(
+                                &self.heirarchial_fn_name(self.module.get_name().to_str().unwrap(), &name),
+                            )
+                            .cloned()
+                            .ok_or_else(|| format!("Undefined function: {}", name))?
+                            .value
+                    }
+                };
 
                 let arg_values: Vec<BasicMetadataValueEnum> = args
                     .iter()
@@ -1427,7 +1471,74 @@ impl<'ctx> CodeGen<'ctx> {
                     .as_basic_value_enum())
             }
 
-            Expr::MethodCall{..} => unimplemented!(),
+            Expr::MethodCall {
+                call_namespace,
+                callee,
+                args,
+            } => {
+                let module_name = call_namespace.first().unwrap().clone();
+                let name = call_namespace.last().unwrap().clone();
+                if self.imports.get(&module_name).is_none() {
+                    return Err(format!("Could not find {} in this scope.", module_name));
+                }
+
+                let module_namespace = self.imports.get(&module_name).unwrap();
+                let func_type = if module_namespace.get(&name).is_none() {
+                    return Err(format!(
+                        "Could not find {} in this {}'s scope.",
+                        name, module_name
+                    ));
+                } else {
+                    module_namespace.get(&name).unwrap().clone()
+                };
+
+                if let DataType::Function { params, ret_type } = func_type {
+                    // Declare the function on demand
+                    let function =
+                        if self.functions.contains_key(&self.heirarchial_fn_name(
+                                &module_name,
+                                &name,
+                            )) {
+                            self.get_function(&self.heirarchial_fn_name(
+                                &module_name,
+                                &name,
+                            ))
+                            .unwrap()
+                            .value
+                        } else {
+                            self.declare_function(
+                                &self.heirarchial_fn_name(
+                                    &module_name,
+                                    &name,
+                                ),
+                                &params,
+                                &ret_type,
+                                // I don't think there can be ffi methods
+                                false,
+                            )?
+                        };
+
+                    let arg_values: Vec<BasicMetadataValueEnum> = args
+                        .iter()
+                        .map(|a| {
+                            self.compile_expression(a.expr.clone(), Some(a.ty.clone()))
+                                .map(|v| v.into())
+                        })
+                        .collect::<Result<_, _>>()?;
+
+                    let call = self
+                        .builder
+                        .build_call(function, &arg_values, "call")
+                        .unwrap();
+
+                    Ok(call
+                        .try_as_basic_value()
+                        .unwrap_basic()
+                        .as_basic_value_enum())
+                } else {
+                    return Err(format!("Trying to call a non function type: {}", name));
+                }
+            }
 
             Expr::If {
                 condition,
@@ -1681,8 +1792,7 @@ impl<'ctx> CodeGen<'ctx> {
 }
 
 impl<'ctx> CodeGen<'ctx> {
-    pub fn get_all_imports(&mut self, cgen_modules: &mut CodeGenModules) {
-    }
+    pub fn get_all_imports(&mut self, cgen_modules: &mut CodeGenModules) {}
 }
 
 impl<'ctx> CodeGen<'ctx> {
@@ -1691,6 +1801,7 @@ impl<'ctx> CodeGen<'ctx> {
         name: &str,
         params: &[(String, DataType)],
         return_type: &DataType,
+        is_alien: bool,
     ) -> Result<FunctionValue<'ctx>, String> {
         let ret_type = self.llvm_type(return_type)?;
         let param_types: Vec<BasicMetadataTypeEnum> = params
@@ -1721,9 +1832,14 @@ impl<'ctx> CodeGen<'ctx> {
                 datatype: return_type.clone(),
                 arguments: arguments,
                 value: function,
+                is_alien,
             },
         );
         Ok(function)
+    }
+
+    fn get_function(&self, name: &str) -> Option<&Function<'ctx>> {
+        return self.functions.get(name)
     }
 
     fn create_entry_block_alloca(
@@ -1790,7 +1906,6 @@ impl<'ctx> CodeGen<'ctx> {
     }
 }
 
-// runtime helpers
 
 impl<'ctx> CodeGen<'ctx> {
     fn get_or_create_runtime_function(
@@ -1813,5 +1928,21 @@ impl<'ctx> CodeGen<'ctx> {
         // Get the c abi name for inbuilt functions
         // print -> pine_print -> c fn call
         INBUILT_FUNCTIONS_TO_ABI[INBUILT_FUNCTIONS.iter().position(|&x| x == name).unwrap()]
+    }
+
+    fn heirarchial_fn_name(&self, parent: &str, name: &str) -> String {
+        if name == "main" {
+            return name.to_string();
+        }
+        return parent.to_string() + "_" + name;
+    }
+
+    fn check_is_function_alien(&self, name: &str) -> Option<&Function<'ctx>> {
+        for (fn_name, func) in self.functions.clone() {
+            if fn_name == name && func.is_alien {
+                return self.functions.get(name)
+            }
+        }
+        None
     }
 }
