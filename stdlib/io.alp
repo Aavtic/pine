@@ -1,5 +1,15 @@
 alien "c" fn pine_println(s: str) -> i32
+alien "c" fn pine_println_int(s: i32) -> i32
+alien "c" fn pine_print(s: str) -> i32
 
 fn print(s: str) -> i32 {
+    pine_print(s)
+}
+
+fn println(s: str) -> i32 {
     pine_println(s)
+}
+
+fn printd(d: i32) -> i32 {
+    pine_println_int(d)
 }

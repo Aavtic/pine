@@ -1,12 +1,12 @@
 use ast::Statement;
 use ast::types::DataType;
-use ast::{BinaryOp, Expr, Literal, TypeEnv, UnaryOp};
+use ast::{BinaryOp, Expr, Literal, TypeEnv, UnaryOp, ModuleEnum, ImportType};
 
 pub const INBUILT_FUNCTIONS: [&str; 2] = ["print", "println"];
 
 pub struct Analyzer {
     pub loop_nest_level: i32,
-    pub imports: TypeEnv,
+    pub imports: ImportType,
     pub exports: TypeEnv,
 }
 
@@ -14,14 +14,14 @@ impl Analyzer {
     pub fn new() -> Self {
         return Self {
             loop_nest_level: 0,
-            imports: TypeEnv::new(),
+            imports: ImportType::new(),
             exports: TypeEnv::new(),
         };
     }
 
     pub fn reset(&mut self) {
         self.loop_nest_level = 0;
-        self.imports = TypeEnv::new();
+        self.imports = ImportType::new();
         self.exports = TypeEnv::new();
     }
 
@@ -31,23 +31,27 @@ impl Analyzer {
     ) -> Result<(), String> {
         // populate exports for each module
         for (_, module) in compilation_unit.modules.iter_mut() {
-            self.analyze(&mut module.ast, TypeEnv::new(), true)?;
-            let exports = self.get_exports();
-            module.add_exports(exports);
-            self.reset();
+            if let ModuleEnum::Module(modu) = module {
+                self.analyze(&mut modu.ast, ImportType::new(), true)?;
+                let exports = self.get_exports();
+                modu.add_exports(exports);
+                self.reset();
+            }
         }
 
         // populate imports for each module
         let compilation_unit_clone = compilation_unit.clone();
         for (_, module) in compilation_unit.modules.iter_mut() {
-            for stmt in module.ast.clone().iter() {
-                if let ast::Statement::Import(import_stmt) = stmt {
-                    let module_name = import_stmt.import_name.clone();
-                    if let Some(import_module) = compilation_unit_clone.get_module(&module_name) {
-                        let imports = import_module.exports.clone();
-                        module.add_imports(imports);
-                    } else {
-                        return Err(format!("Could not find module: {}", module_name));
+            if let ModuleEnum::Module(modu) = module {
+                for stmt in modu.ast.clone().iter() {
+                    if let ast::Statement::Import(import_stmt) = stmt {
+                        let module_name = import_stmt.import_name.clone();
+                        if let Some(ModuleEnum::Module(import_module)) = compilation_unit_clone.get_module(&module_name) {
+                            let imports = import_module.exports.clone();
+                            modu.add_imports(import_stmt.import_name.clone(), imports);
+                        } else {
+                            return Err(format!("Could not find module: {}", module_name));
+                        }
                     }
                 }
             }
@@ -55,8 +59,10 @@ impl Analyzer {
 
         // analyze every modules
         for (_, module) in compilation_unit.modules.iter_mut() {
-            self.analyze(&mut module.ast, module.imports.clone(), false)?;
-            self.reset();
+            if let ModuleEnum::Module(modu) = module {
+                self.analyze(&mut modu.ast, modu.imports.clone(), false)?;
+                self.reset();
+            }
         }
 
         Ok(())
@@ -67,7 +73,7 @@ impl Analyzer {
     pub fn analyze(
         &mut self,
         ast: &mut Vec<Statement>,
-        imports: TypeEnv,
+        imports: ImportType,
         only_exports: bool,
     ) -> Result<(), String> {
         let mut env = TypeEnv::new();
@@ -246,8 +252,8 @@ impl Analyzer {
             Expr::Variable { name, tok } => {
                 if let Some(ty) = env.get(name.as_str()) {
                     expr.ty = ty.clone();
-                } else if let Some(ty) = self.imports.get(name.as_str()) {
-                    expr.ty = ty.clone();
+                //} else if let Some(ty) = self.imports.get(name.as_str()) {
+                //    expr.ty = ty.clone();
                 } else {
                     return Err(format!(
                         "Undefined variable: {} at {}:{}",
@@ -352,8 +358,8 @@ impl Analyzer {
                     if env.get(name).is_some() {
                         env.get(name).unwrap().clone()
                     // Otherwise check if it is imported
-                    } else if self.imports.get(name).is_some() {
-                        self.imports.get(name).unwrap().clone()
+                    //} else if self.imports.get(name).is_some() {
+                    //    self.imports.get(name).unwrap().clone()
                     } else {
                         return Err(format!("Undefined function: {}", name));
                     }
@@ -381,9 +387,45 @@ impl Analyzer {
                 }
             }
 
-            Expr::MethodCall { .. } => {
-                // Todo
-                eprintln!("INFO: method call analysis is not done");
+            Expr::MethodCall { call_namespace, callee, args} => {
+                // This is not pure method call structure
+                // This assumes import calls as method calls
+                assert_eq!(call_namespace.iter().len(), 2);
+
+                let module_name = call_namespace.first().unwrap().clone();
+                let name = call_namespace.iter().nth(1).unwrap().clone();
+                if self.imports.get(&module_name).is_none() {
+                    return Err(format!("Could not find {} in this scope.", module_name));
+                }
+
+                let module_namespace = self.imports.get(&module_name).unwrap(); 
+                let func_type = if module_namespace.get(&name).is_none() {
+                    return Err(format!("Could not find {} in this {}'s scope.", name, module_name));
+                } else {
+                    module_namespace.get(&name).unwrap().clone()
+                };
+
+
+                if let DataType::Function { params, ret_type } = func_type {
+                    if args.len() != params.len() {
+                        return Err(format!(
+                            "Function {} expectes {} arguments, got {} arguments",
+                            name,
+                            params.len(),
+                            args.len()
+                        ));
+                    }
+
+                    for (arg, param) in args.iter_mut().zip(params) {
+                        self.typecheck_expr(arg, env)?;
+                        let _ = param.1.unify(&arg.ty)?;
+                    }
+
+                    // Set the type
+                    expr.ty = *ret_type;
+                } else {
+                    return Err(format!("{} is not a function", name));
+                }
             }
 
             Expr::Grouping(ex) => {
@@ -464,7 +506,7 @@ impl Analyzer {
 }
 
 impl Analyzer {
-    fn get_imports(&self) -> TypeEnv {
+    fn get_imports(&self) -> ImportType {
         self.imports.clone()
     }
 

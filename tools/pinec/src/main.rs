@@ -90,7 +90,7 @@ fn _print_ast_to_dot(source_path: PathBuf, out_file: PathBuf) {
     let mut parser = Parser::new(tokens, parent);
 
     parser.parse("main").unwrap_or_else(|err| panic!("Couldn't parse the program due to: \n{}", err));
-    let mut ast = parser.get_compilation_unit().get_module("main").unwrap().ast.clone();
+    //let mut ast = parser.get_compilation_unit().get_module("main").unwrap().ast.clone();
 
     unimplemented!();
 

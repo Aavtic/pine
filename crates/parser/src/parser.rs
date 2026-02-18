@@ -1,4 +1,4 @@
-use ast::DataType;
+use ast::{DataType, ModuleEnum};
 //use ast::ast;
 use lexer::lexer::{Object, Token, TokenType};
 use config::{stdlib, constants};
@@ -89,7 +89,8 @@ impl Parser {
 
         // add to compilation_unit
         let module = ast::Module::new(module_name.into(), statements.clone());
-        self.compilation_unit.add_module(module_name.into(), module);
+        let module_val = ModuleEnum::Module(module);
+        self.compilation_unit.add_module(module_name.into(), module_val);
 
         // Get all the import statements and parse them
         for statement in &statements {

@@ -6,18 +6,27 @@ use crate::DataType;
 // For use in the analyzer for type checking
 pub type TypeEnv = HashMap<String, DataType>;
 
+// Import with namespacing
+pub type ImportType = HashMap<String, TypeEnv>;
+
 #[derive(Debug, Clone)]
 pub struct Module {
     pub name: String,
     pub ast: Vec<Statement>,
-    pub imports: TypeEnv,
+    pub imports: ImportType,
     pub exports: TypeEnv,
     //pub lookup_table: 
 }
 
+#[derive(Clone, Debug)]
+pub enum ModuleEnum {
+    Module(Module),
+    NameSpace(Box<ModuleEnum>),
+}
+
 #[derive(Debug, Clone)]
 pub struct CompilationUnit {
-    pub modules: HashMap<String, Module>,
+    pub modules: HashMap<String, ModuleEnum>,
 }
 
 impl CompilationUnit {
@@ -26,15 +35,16 @@ impl CompilationUnit {
             modules: HashMap::new(),
         }
     }
-    pub fn add_module(&mut self, name: String, module: Module) {
+
+    pub fn add_module(&mut self, name: String, module: ModuleEnum) {
         self.modules.insert(name, module);
     }
 
-    pub fn get_module(&self, name: &str) -> Option<&Module> {
+    pub fn get_module(&self, name: &str) -> Option<&ModuleEnum> {
         return self.modules.get(name);
     }
 
-    pub fn get_module_mut(&mut self, name: &str) -> Option<&mut Module> {
+    pub fn get_module_mut(&mut self, name: &str) -> Option<&mut ModuleEnum> {
         self.modules.get_mut(name)
     }
 }
@@ -43,16 +53,14 @@ impl Module {
     pub fn new(name: String,  ast: Vec<Statement>) -> Self {
         Self {
             name,
-            imports: TypeEnv::new(),
+            imports: ImportType::new(),
             exports: TypeEnv::new(),
             ast,
         }
     }
 
-    pub fn add_imports(&mut self, import: TypeEnv) {
-        for (key, val) in import {
-            self.imports.insert(key, val);
-        }
+    pub fn add_imports(&mut self, name: String, import: TypeEnv) {
+        self.imports.insert(name, import);
     }
 
     pub fn add_exports(&mut self, exports: TypeEnv) {
