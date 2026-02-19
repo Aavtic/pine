@@ -30,43 +30,100 @@ impl Analyzer {
         compilation_unit: &mut ast::CompilationUnit,
     ) -> Result<(), String> {
         // populate exports for each module
-        for (_, module) in compilation_unit.modules.iter_mut() {
-            if let ModuleEnum::Module(modu) = module {
-                self.analyze(&mut modu.ast, ImportType::new(), true)?;
-                let exports = self.get_exports();
-                modu.add_exports(exports);
-                self.reset();
-            }
-        }
+        self.populate_exports(compilation_unit)?;
 
         // populate imports for each module
-        let compilation_unit_clone = compilation_unit.clone();
-        for (_, module) in compilation_unit.modules.iter_mut() {
-            if let ModuleEnum::Module(modu) = module {
-                for stmt in modu.ast.clone().iter() {
-                    if let ast::Statement::Import(import_stmt) = stmt {
-                        let module_name = import_stmt.import_name.clone();
-                        if let Some(ModuleEnum::Module(import_module)) = compilation_unit_clone.get_module(&module_name) {
-                            let imports = import_module.exports.clone();
-                            modu.add_imports(import_stmt.import_name.clone(), imports);
-                        } else {
-                            return Err(format!("Could not find module: {}", module_name));
-                        }
-                    }
-                }
-            }
-        }
+        self.populate_imports(compilation_unit)?;
 
         // analyze every modules
+        self.run_analysis(compilation_unit)?;
+
+        Ok(())
+    }
+
+    fn run_analysis(&mut self, compilation_unit: &mut ast::CompilationUnit) -> Result<(), String> {
         for (_, module) in compilation_unit.modules.iter_mut() {
             if let ModuleEnum::Module(modu) = module {
-                self.analyze(&mut modu.ast, modu.imports.clone(), false)?;
+                self.analyze(&mut modu.ast, modu.imports.clone(), AnalysisMode::Semantic)?;
                 self.reset();
             }
         }
 
         Ok(())
     }
+
+    fn populate_imports(&mut self, compilation_unit: &mut ast::CompilationUnit) -> Result<(), String> {
+        let links = self.collect_imports(compilation_unit);
+        self.link_imports(links, compilation_unit)?;
+
+        Ok(())
+    }
+
+    fn link_imports(&mut self, links: Vec<ast::Link>, compilation_unit: &mut ast::CompilationUnit) -> Result<(), String> {
+        for link in links {
+            // get dependency first
+            let exports = {
+                let module = compilation_unit.get_module(&link.require_mod)
+                    .ok_or_else(|| format!("Could not find module: {}", &link.require_mod))?;
+
+                if let ModuleEnum::Module(modu) = module {
+                    modu.exports.clone()
+                } else {
+                    continue
+                }
+            };
+
+            // inject to imports
+            if let Some(ModuleEnum::Module(modu)) = compilation_unit.get_module_mut(&link.source_mod) {
+                modu.add_imports(link.require_mod, exports);
+            }
+        }
+
+        Ok(())
+    }
+
+    fn collect_imports(&self, compilation_unit: &ast::CompilationUnit) -> Vec<ast::Link> {
+        let mut links = Vec::new();
+
+        for (name, module) in compilation_unit.modules.iter() {
+            if let ast::ModuleEnum::Module(modu) = module {
+                for stmt in &modu.ast {
+                    if let ast::Statement::Import(imp) = stmt {
+                        links.push(ast::Link{
+                            source_mod: name.clone(),
+                            require_mod: imp.import_name.clone(),
+                        });
+                    }
+                }
+            }
+        }
+
+        links
+    }
+
+    fn populate_exports(&mut self, compilation_unit: &mut ast::CompilationUnit) -> Result<(), String> {
+        for (_, modu) in compilation_unit.modules.iter_mut() {
+            if let ModuleEnum::Module(modu) = modu {
+                self.analyze_exports(modu)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn analyze_exports(&mut self, modu: &mut ast::Module) -> Result<(), String> {
+        self.analyze(&mut modu.ast, ImportType::new(), AnalysisMode::Exports)?;
+        let exports = self.get_exports();
+        modu.add_exports(exports);
+        self.reset();
+
+        Ok(())
+    }
+}
+
+#[derive(PartialEq)]
+enum AnalysisMode {
+    Semantic,
+    Exports,
 }
 
 impl Analyzer {
@@ -74,7 +131,7 @@ impl Analyzer {
         &mut self,
         ast: &mut Vec<Statement>,
         imports: ImportType,
-        only_exports: bool,
+        mode: AnalysisMode,
     ) -> Result<(), String> {
         let mut env = TypeEnv::new();
         self.imports = imports;
@@ -96,7 +153,7 @@ impl Analyzer {
             }
         }
 
-        if only_exports {
+        if mode == AnalysisMode::Exports {
             self.exports = env.clone();
             return Ok(());
         }

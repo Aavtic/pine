@@ -225,6 +225,7 @@ fn build_object(file: PathBuf) {
     for (name, module) in modules {
         linker::ObjectCompiler::compile_module(&module, &name, file.parent().unwrap());
     }
+    linker::ObjectLinker::compile_runtime(&module_name);
 
     // Don't verify object because they may not be complete
     //if module_ref.verify().is_err() {

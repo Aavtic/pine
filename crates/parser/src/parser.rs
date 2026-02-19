@@ -81,9 +81,8 @@ impl Parser {
     pub fn parse(&mut self, module_name: &str) -> Result<(), ParseError> {
         let mut statements = Vec::new();
         while !self.is_end() {
-            match self.statement() {
-                Some(statement) => statements.push(statement),
-                None => {}
+            if let Some(statement) = self.statement() {
+                statements.push(statement);
             }
         }
 
@@ -92,23 +91,24 @@ impl Parser {
         let module_val = ModuleEnum::Module(module);
         self.compilation_unit.add_module(module_name.into(), module_val);
 
-        // Get all the import statements and parse them
-        for statement in &statements {
-            if let ast::Statement::Import(stmt) = statement {
-                let file_name = {
-                    if self.project_dir.join(stmt.import_name.clone() + constants::PINE_EXTENSION).exists() {
-                        self.project_dir.join(stmt.import_name.clone() + constants::PINE_EXTENSION)
-                    } else if stdlib::stdlib_path().join(stmt.import_name.clone() + constants::PINE_EXTENSION).exists() {
-                        stdlib::stdlib_path().join(stmt.import_name.clone() + constants::PINE_EXTENSION)
-                    } else {
-                        return Err(ParseError::ParseError(format!("Could not find module: {}. Not part of standard library or present in current directory", stmt.import_name.clone()), 69, 69));
-                    }
-                };
-                let source = handle_reading_file(&std::path::PathBuf::from(file_name));
-                let tokens = lexer::lexer::lex(&source);
-                self.reset(tokens);
-                self.parse(&stmt.import_name)?;
-            }
+        // parse all import dependencies
+        let imports: Vec<_> = statements
+            .iter()
+            .filter_map(|stmt| {
+                if let ast::Statement::Import(i) = stmt {
+                    Some(i)
+                } else {
+                    None
+                }
+            }).collect();
+
+
+        for import in imports {
+            let file_name = self.resolve_import_path(import.import_name.clone())?;
+            let source = handle_reading_file(&std::path::PathBuf::from(file_name));
+            let tokens = lexer::lexer::lex(&source);
+            self.reset(tokens);
+            self.parse(&import.import_name)?;
         }
 
         Ok(())
@@ -1001,5 +1001,28 @@ impl Parser {
 
             self.advance();
         }
+    }
+}
+
+
+impl Parser {
+    fn resolve_import_path(&self, name: String) -> Result<PathBuf, ParseError> {
+        let file = name.clone() + constants::PINE_EXTENSION;
+
+        // check current dir
+        let project_file = self.project_dir.join(&file);
+        if project_file.exists() {
+            return Ok(project_file);
+        }
+
+        // check stdlib
+        let stdlib_file = stdlib::stdlib_path().join(&file);
+        if stdlib_file.exists() {
+            return Ok(stdlib_file);
+        }
+
+        // error out
+
+        Err(ParseError::ParseError(format!("Could not find module: {}. Not part of standard library or present in current directory", name), 69, 69))
     }
 }

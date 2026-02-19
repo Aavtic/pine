@@ -70,6 +70,11 @@ impl Module {
     }
 }
 
+pub struct Link {
+    pub source_mod: String,
+    pub require_mod: String,
+}
+
 #[derive(Debug, Clone)]
 pub enum Statement {
     VariableDeclaration(VarDecl),

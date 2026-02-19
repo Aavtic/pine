@@ -30,14 +30,12 @@ use inkwell::{
 
 pub struct CodeGenModules<'ctx> {
     pub modules: HashMap<String, CodeGen<'ctx>>,
-    compilation_order: Vec<String>,
 }
 
 impl<'ctx> CodeGenModules<'ctx> {
     pub fn new() -> Self {
         return Self {
             modules: HashMap::new(),
-            compilation_order: Vec::new(),
         };
     }
 
@@ -188,24 +186,6 @@ impl<'ctx> CodeGen<'ctx> {
             }
         }
 
-        //// Phase 3 Declare all the imported functions
-        //for (imp_name, imp_ty) in imports {
-        //    for (name, ty) in imp_ty {
-        //        if let DataType::Function{params, ret_type} = ty {
-        //            let mut input: Vec<(String, DataType)> = Vec::new();
-        //            let ret_type = ret_type.clone();
-        //
-        //            for arg in params {
-        //                input.push((arg.0.clone(), arg.1.clone()))
-        //            }
-        //
-        //
-        //            self.declare_function(&name, input.as_slice(), &ret_type)
-        //                .unwrap();
-        //        }
-        //    }
-        //}
-
         // Phase 4 Compile all statements
         for statement in statements {
             if let Statement::FunctionDefinition(_) = statement {
@@ -219,7 +199,7 @@ impl<'ctx> CodeGen<'ctx> {
 
                     match function.get_type().get_return_type() {
                         Some(ret_ty) => {
-                            // Non-void function → implicit return value
+                            // Non-void function -> implicit return value
                             let zero = ret_ty.const_zero();
                             self.builder.build_return(Some(&zero)).unwrap();
                         }

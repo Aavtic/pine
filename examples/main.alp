@@ -1,12 +1,26 @@
 use io
 use math
+use local
+
+fn square(n: i32) -> i32 {
+    io.println("main square")
+    return n * n
+}
 
 fn main() {
     let number = 3
-    let result = math.square(number)
+    let math_res = math.square(number)
+    let local_res = local.square(number)
+    let main_res = square(number)
 
     io.print("The square of 3 is: ")
-    io.printd(result)
+    io.printd(math_res)
+
+    io.print("The square of 3 is: ")
+    io.printd(local_res)
+
+    io.print("The square of 3 is: ")
+    io.printd(main_res)
 
     return 0
 }
