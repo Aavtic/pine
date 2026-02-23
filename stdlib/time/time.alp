@@ -1,0 +1,3 @@
+fn get_current_time() -> str {
+    return "12:00"
+}

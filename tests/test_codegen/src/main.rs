@@ -3,15 +3,13 @@ use std::path::PathBuf;
 
 use clap::{Args, Subcommand};
 
+use analyzer::analyzer::Analyzer;
 use lexer::lexer::{Token, lex};
 use parser::parser::Parser;
-use analyzer::analyzer::Analyzer;
 use codegen::codegen::{CodeGen, CodeGenModules};
 use linker::linker;
-
+//
 use utils::handle_reading_file;
-
-const PROJECT_ROOT: &str = "main";
 
 /// Pine Compiler
 #[derive(ClapParser, Debug)]
@@ -71,15 +69,9 @@ fn main() {
                     //alpherac build ast
                     build_ast(build.source_file)
                 }
-                Some(BuildMode::Analyze) => {
-                    build_analyze(build.source_file)
-                }
-                Some(BuildMode::Object) => {
-                    build_object(build.source_file)
-                }
-                Some(BuildMode::LlvmIr) => {
-                    build_llvm_ir(build.source_file)
-                }
+                Some(BuildMode::Analyze) => build_analyze(build.source_file),
+                Some(BuildMode::Object) => build_object(build.source_file),
+                Some(BuildMode::LlvmIr) => build_llvm_ir(build.source_file),
             }
         }
     }
@@ -88,10 +80,16 @@ fn main() {
 fn _print_ast_to_dot(source_path: PathBuf, out_file: PathBuf) {
     let source = handle_reading_file(&source_path);
     let tokens = lex(source.as_str());
-    let parent = PathBuf::from(source_path.parent().expect("Unable to find parent for source file"));
+    let parent = PathBuf::from(
+        source_path
+            .parent()
+            .expect("Unable to find parent for source file"),
+    );
     let mut parser = Parser::new(tokens, parent);
 
-    //parser.parse("main").unwrap_or_else(|err| panic!("Couldn't parse the program due to: \n{}", err));
+    parser
+        .parse("main", vec!["root".into()], false)
+        .unwrap_or_else(|err| panic!("Couldn't parse the program due to: \n{}", err));
     //let mut ast = parser.get_compilation_unit().get_module("main").unwrap().ast.clone();
 
     unimplemented!();
@@ -109,10 +107,16 @@ fn _print_ast_to_dot(source_path: PathBuf, out_file: PathBuf) {
 fn build_ast(source_path: PathBuf) {
     let source = handle_reading_file(&source_path);
     let tokens = lex(source.as_str());
-    let parent = PathBuf::from(source_path.parent().expect("Unable to find parent for source file"));
+    let parent = PathBuf::from(
+        source_path
+            .parent()
+            .expect("Unable to find parent for source file"),
+    );
     let mut parser = Parser::new(tokens, parent);
 
-    parser.parse(PROJECT_ROOT, vec![PROJECT_ROOT.into()], true).unwrap_or_else(|err| panic!("Couldn't parse the program due to: \n{}", err));
+    parser
+        .parse("main", vec!["main".into()], true)
+        .unwrap_or_else(|err| panic!("Couldn't parse the program due to: \n{}", err));
     let ast = parser.get_compilation_unit();
 
     println!("{:#?}", ast);
@@ -126,9 +130,9 @@ fn build_analyze(file: PathBuf) {
             .expect("Unable to find parent for source file"),
     );
     let mut parser = Parser::new(tokens, parent);
-    let namespace = vec![PROJECT_ROOT.into()];
+    let namespace = vec!["main".into()];
     parser
-        .parse(PROJECT_ROOT, namespace.clone(), true)
+        .parse("main", namespace.clone(), true)
         .unwrap_or_else(|err| panic!("Couldn't parse the program due to: \n{}", err));
 
     //let mut ast = parser.get_compilation_unit().get_module("main").unwrap().ast.clone();
@@ -153,7 +157,7 @@ fn build_llvm_ir(file: PathBuf) {
     let mut parser = Parser::new(tokens, parent);
     let namespace = vec!["main".into()];
     parser
-        .parse(PROJECT_ROOT, namespace.clone(), true)
+        .parse("main", namespace.clone(), true)
         .unwrap_or_else(|err| panic!("Couldn't parse the program due to: \n{}", err));
 
     //let mut ast = parser.get_compilation_unit().get_module("main").unwrap().ast.clone();
@@ -249,9 +253,7 @@ fn build_object(file: PathBuf) {
 }
 
 fn print_tokens(file: PathBuf) {
-    let source = handle_reading_file(&file);
-    let tokens = lex(source.as_str());
-    _print_tokens(tokens.clone());
+    unimplemented!();
 }
 
 fn compile_program(file: PathBuf) {
@@ -264,7 +266,7 @@ fn compile_program(file: PathBuf) {
     let mut parser = Parser::new(tokens, parent);
     let namespace = vec!["main".into()];
     parser
-        .parse(PROJECT_ROOT, namespace.clone(), true)
+        .parse("main", namespace.clone(), true)
         .unwrap_or_else(|err| panic!("Couldn't parse the program due to: \n{}", err));
 
     //let mut ast = parser.get_compilation_unit().get_module("main").unwrap().ast.clone();

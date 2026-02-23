@@ -1,0 +1,11 @@
+use io
+
+fn second(other: str) -> i32 {
+    io.print("other: ")
+    io.println(other)
+    if other == "minute" {
+        return 60
+    }
+
+    return 0
+}

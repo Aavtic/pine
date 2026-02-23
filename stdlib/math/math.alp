@@ -8,3 +8,4 @@ fn square(n: i32) -> i32 {
     io.println("math square")
     return n * n
 }
+

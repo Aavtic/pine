@@ -1,0 +1,6 @@
+use io
+
+fn square(n: i32) -> i32 {
+    io.println("local square")
+    return n * n
+}

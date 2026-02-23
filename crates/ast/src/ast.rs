@@ -10,6 +10,96 @@ pub type TypeEnv = HashMap<String, DataType>;
 pub type ImportType = HashMap<String, TypeEnv>;
 
 #[derive(Debug, Clone)]
+pub struct Namespace {
+    name: String,
+    modules: Vec<Module>,
+    namespaces: HashMap<String, Namespace>,
+}
+
+impl Namespace {
+    fn new(name: &str) -> Self {
+        Self {
+            name: name.into(),
+            modules: Vec::new(),
+            namespaces: HashMap::new(),
+        }
+    }
+
+    pub fn get_name(&self) -> String {
+        return self.name.clone();
+    }
+
+    fn add_module(&mut self, module: Module) {
+        self.modules.push(module);
+    }
+
+    pub fn get_module(&self, name: &str) -> Option<&Module> {
+        for module in self.modules.iter() {
+            if module.name == name {
+                return Some(module)
+            }
+        }
+        None
+    }
+
+    pub fn get_module_mut(&mut self, name: &str) -> Option<&mut Module> {
+        for module in self.modules.iter_mut() {
+            if module.name == name {
+                return Some(module)
+            }
+        }
+        None
+    }
+
+    pub fn get_all_modules(&self) -> Vec<Module> {
+        return self.modules.clone();
+    }
+
+    pub fn get_all_modules_mut(&mut self) -> &mut Vec<Module> {
+        return &mut self.modules;
+    }
+
+    pub fn get_all_namespaces_mut(&mut self) -> &mut HashMap<String, Namespace> {
+        return &mut self.namespaces;
+    }
+
+    pub fn get_all_namespaces(&self) -> HashMap<String, Namespace> {
+        return self.namespaces.clone();
+    }
+
+    pub fn get_namespace(&self, namespace: &Vec<String>) -> Option<Namespace> {
+        let names = namespace.iter();
+
+        let mut current = self.clone();
+
+        for name in names {
+            current = current.namespaces.get(name)?.clone();
+        }
+
+        return Some(current.clone());
+    }
+
+    pub fn get_namespace_mut(&mut self, namespace: &Vec<String>) -> Option<&mut Namespace> {
+        let names = namespace.iter();
+
+        let mut current = self;
+        for name in names {
+            current = current.namespaces.get_mut(name)?;
+        }
+
+        Some(current)
+    }
+
+    pub fn get_module_by_path_mut(&mut self, module_path: &Vec<String>) -> Option<&mut Module> {
+        let module_name = module_path.last()?;
+        let namespace = &module_path[..module_path.len() - 1].to_vec();
+        
+        let space = self.get_namespace_mut(namespace)?;
+        space.get_module_mut(module_name)
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct Module {
     pub name: String,
     pub ast: Vec<Statement>,
@@ -20,32 +110,94 @@ pub struct Module {
 
 #[derive(Clone, Debug)]
 pub enum ModuleEnum {
+    /// All the modules in the current namespace: E.g io/{io.alp, scan.alp}
     Module(Module),
-    NameSpace(Box<ModuleEnum>),
+    // All the namespaces in the current namespace E.g io/pretty
+    //Namespace(Vec<(String, Box<Vec<ModuleEnum>>)>),
 }
 
 #[derive(Debug, Clone)]
 pub struct CompilationUnit {
-    pub modules: HashMap<String, ModuleEnum>,
+    //use io
+    //use io/pretty
+    //use io/sync
+    //use io/a/b
+    root: Namespace,
 }
 
 impl CompilationUnit {
     pub fn new() -> Self {
         Self {
-            modules: HashMap::new(),
+            root: Namespace::new("main"),
         }
     }
 
-    pub fn add_module(&mut self, name: String, module: ModuleEnum) {
-        self.modules.insert(name, module);
+    pub fn add_module(&mut self, namespace: Vec<String>, module: Module) {
+        self.create_namespace(&namespace);
+        if let Some(space) = self.get_namespace_mut(namespace.clone()) {
+            space.add_module(module)
+        } else {
+            unreachable!();
+        }
     }
 
-    pub fn get_module(&self, name: &str) -> Option<&ModuleEnum> {
-        return self.modules.get(name);
+    pub fn add_global(&mut self, module: Module) {
+        self.root.modules.push(module);
     }
 
-    pub fn get_module_mut(&mut self, name: &str) -> Option<&mut ModuleEnum> {
-        self.modules.get_mut(name)
+    fn create_namespace(&mut self, namespaces: &Vec<String>) {
+        let mut namespace = &mut self.root.namespaces;
+        for name in namespaces {
+            if !namespace.contains_key(name) {
+                namespace.insert(name.clone(), Namespace::new(&name));
+            }
+
+            namespace = &mut namespace.get_mut(name).unwrap().namespaces;
+        }
+    }
+
+    pub fn get_namespace(&self, namespace: Vec<String>) -> Option<Namespace> {
+        let mut names = namespace.iter();
+        let first = names.next()?;
+
+        let mut current = self.root.namespaces.get(first)?;
+
+        for name in names {
+            current = current.namespaces.get(name)?;
+        }
+
+        return Some(current.clone());
+    }
+
+    pub fn get_namespace_mut(&mut self, namespace: Vec<String>) -> Option<&mut Namespace> {
+        let mut names = namespace.iter();
+        let first = names.next()?;
+
+        let mut current = self.root.namespaces.get_mut(first)?;
+
+        for name in names {
+            current = current.namespaces.get_mut(name)?;
+        }
+
+        return Some(current);
+    }
+
+    pub fn get_root_namespace_mut(&mut self) -> &mut Namespace {
+        return &mut self.root;
+    }
+
+    pub fn get_root_namespace(&self) -> Namespace {
+        return self.root.clone();
+    }
+
+    pub fn get_module(&self, name: &str, namespace: Vec<String>) -> Option<Module> {
+        let space = self.get_namespace(namespace)?;
+        space.get_module(name).cloned()
+    }
+
+    pub fn get_module_mut(&mut self, name: &str, namespace: Vec<String>) -> Option<&mut Module> {
+        let space = self.get_namespace_mut(namespace)?;
+        space.get_module_mut(name)
     }
 }
 
@@ -71,8 +223,11 @@ impl Module {
 }
 
 pub struct Link {
-    pub source_mod: String,
-    pub require_mod: String,
+    // source module name
+    // the last element represents module name and the rest are part of namespace
+    pub source_mod: Vec<String>,
+    // require module name, needs to be vec to resolve namespace
+    pub require_mod: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -113,7 +268,7 @@ impl TypedExpr {
 
 #[derive(Debug, Clone)]
 pub struct ImportStmt {
-    pub import_name: String,
+    pub import_namespace: Vec<String>,
     // TODO: add alias,
     // import a as b
 }

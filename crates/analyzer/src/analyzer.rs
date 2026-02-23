@@ -1,8 +1,13 @@
 use ast::Statement;
 use ast::types::DataType;
-use ast::{BinaryOp, Expr, Literal, TypeEnv, UnaryOp, ModuleEnum, ImportType};
+use ast::{BinaryOp, Expr, ImportType, Literal, Namespace, TypeEnv, UnaryOp};
 
 pub const INBUILT_FUNCTIONS: [&str; 2] = ["print", "println"];
+
+enum NamespaceType {
+    Root,
+    Namespace(Vec<String>),
+}
 
 pub struct Analyzer {
     pub loop_nest_level: i32,
@@ -30,82 +35,107 @@ impl Analyzer {
         compilation_unit: &mut ast::CompilationUnit,
     ) -> Result<(), String> {
         // populate exports for each module
-        self.populate_exports(compilation_unit)?;
+        self.populate_exports(compilation_unit.get_root_namespace_mut())?;
 
         // populate imports for each module
-        self.populate_imports(compilation_unit)?;
+        self.populate_imports(compilation_unit.get_root_namespace_mut())?;
 
         // analyze every modules
-        self.run_analysis(compilation_unit)?;
+        self.run_analysis(compilation_unit.get_root_namespace_mut())?;
 
         Ok(())
     }
 
-    fn run_analysis(&mut self, compilation_unit: &mut ast::CompilationUnit) -> Result<(), String> {
-        for (_, module) in compilation_unit.modules.iter_mut() {
-            if let ModuleEnum::Module(modu) = module {
-                self.analyze(&mut modu.ast, modu.imports.clone(), AnalysisMode::Semantic)?;
-                self.reset();
-            }
+    fn run_analysis(&mut self, space: &mut Namespace) -> Result<(), String> {
+        let modules = space.get_all_modules_mut();
+
+        for module in modules.iter_mut() {
+            self.analyze(
+                &mut module.ast,
+                module.imports.clone(),
+                AnalysisMode::Semantic,
+            )?;
+            self.reset();
+        }
+
+        for (_, space) in space.get_all_namespaces_mut() {
+            self.run_analysis(space)?;
         }
 
         Ok(())
     }
 
-    fn populate_imports(&mut self, compilation_unit: &mut ast::CompilationUnit) -> Result<(), String> {
-        let links = self.collect_imports(compilation_unit);
-        self.link_imports(links, compilation_unit)?;
+    fn populate_imports(&mut self, space: &mut Namespace) -> Result<(), String> {
+        let links = self.collect_imports(space.clone(), &mut Vec::new());
+        self.link_imports(links, space)?;
 
         Ok(())
     }
 
-    fn link_imports(&mut self, links: Vec<ast::Link>, compilation_unit: &mut ast::CompilationUnit) -> Result<(), String> {
+    fn link_imports(
+        &mut self,
+        links: Vec<ast::Link>,
+        namespace: &mut Namespace,
+    ) -> Result<(), String> {
         for link in links {
-            // get dependency first
             let exports = {
-                let module = compilation_unit.get_module(&link.require_mod)
-                    .ok_or_else(|| format!("Could not find module: {}", &link.require_mod))?;
-
-                if let ModuleEnum::Module(modu) = module {
-                    modu.exports.clone()
-                } else {
-                    continue
+                let space = namespace
+                    .get_namespace(&link.require_mod)
+                    .ok_or_else(|| format!("Could not find module: {:?}", &link.require_mod))?;
+                let mut exp = TypeEnv::new();
+                for module in space.get_all_modules() {
+                    exp.extend(module.exports);
                 }
+                exp
             };
 
-            // inject to imports
-            if let Some(ModuleEnum::Module(modu)) = compilation_unit.get_module_mut(&link.source_mod) {
-                modu.add_imports(link.require_mod, exports);
-            }
+            let module = namespace
+                .get_module_by_path_mut(&link.source_mod)
+                .ok_or_else(|| format!("Could not find module: {:?}", &link.source_mod))?;
+            module.add_imports(link.require_mod.last().unwrap().into(), exports);
         }
 
         Ok(())
     }
 
-    fn collect_imports(&self, compilation_unit: &ast::CompilationUnit) -> Vec<ast::Link> {
+    fn collect_imports(&self, space: Namespace, path: &mut Vec<String>) -> Vec<ast::Link> {
         let mut links = Vec::new();
 
-        for (name, module) in compilation_unit.modules.iter() {
-            if let ast::ModuleEnum::Module(modu) = module {
-                for stmt in &modu.ast {
-                    if let ast::Statement::Import(imp) = stmt {
-                        links.push(ast::Link{
-                            source_mod: name.clone(),
-                            require_mod: imp.import_name.clone(),
-                        });
-                    }
+        let modules = space.get_all_modules();
+
+        for module in modules.iter() {
+            for stmt in &module.ast {
+                if let ast::Statement::Import(imp) = stmt {
+                    // add the module name to the end for
+                    // identifying the module later
+                    // when injecting dependencies to module
+                    let mut module_id = path.clone();
+                    module_id.push(module.name.clone());
+
+                    links.push(ast::Link {
+                        source_mod: module_id,
+                        require_mod: imp.import_namespace.clone(),
+                    });
                 }
             }
+        }
+
+        for (name, space) in space.get_all_namespaces() {
+            path.push(name);
+            links.extend(self.collect_imports(space, path));
+            path.pop();
         }
 
         links
     }
+    
+    fn populate_exports(&mut self, namespace: &mut Namespace) -> Result<(), String> {
+        for module in namespace.get_all_modules_mut() {
+            self.analyze_exports(module)?;
+        }
 
-    fn populate_exports(&mut self, compilation_unit: &mut ast::CompilationUnit) -> Result<(), String> {
-        for (_, modu) in compilation_unit.modules.iter_mut() {
-            if let ModuleEnum::Module(modu) = modu {
-                self.analyze_exports(modu)?;
-            }
+        for (_, space) in namespace.get_all_namespaces_mut() {
+            self.populate_exports(space)?;
         }
         Ok(())
     }
@@ -127,7 +157,7 @@ enum AnalysisMode {
 }
 
 impl Analyzer {
-    pub fn analyze(
+    fn analyze(
         &mut self,
         ast: &mut Vec<Statement>,
         imports: ImportType,
@@ -444,7 +474,11 @@ impl Analyzer {
                 }
             }
 
-            Expr::MethodCall { call_namespace, callee, args} => {
+            Expr::MethodCall {
+                call_namespace,
+                callee,
+                args,
+            } => {
                 // This is not pure method call structure
                 // This assumes import calls as method calls
                 assert_eq!(call_namespace.iter().len(), 2);
@@ -455,13 +489,15 @@ impl Analyzer {
                     return Err(format!("Could not find {} in this scope.", module_name));
                 }
 
-                let module_namespace = self.imports.get(&module_name).unwrap(); 
+                let module_namespace = self.imports.get(&module_name).unwrap();
                 let func_type = if module_namespace.get(&name).is_none() {
-                    return Err(format!("Could not find {} in this {}'s scope.", name, module_name));
+                    return Err(format!(
+                        "Could not find {} in {}'s scope.",
+                        name, module_name
+                    ));
                 } else {
                     module_namespace.get(&name).unwrap().clone()
                 };
-
 
                 if let DataType::Function { params, ret_type } = func_type {
                     if args.len() != params.len() {

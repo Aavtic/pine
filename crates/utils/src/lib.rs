@@ -38,6 +38,22 @@ pub fn get_all_files_in_dir(dir_path: &str) -> Vec<String> {
     return result;
 }
 
+pub fn get_all_files_in_dir_as_path(dir_path: &str) -> Vec<PathBuf> {
+    let mut result = Vec::new();
+    // read_dir returns an iterator, which can be looped through
+    for entry in fs::read_dir(dir_path).unwrap() {
+        let entry = entry.unwrap();
+        let path = entry.path();
+        
+        // Optional: filter to only show files, not directories or other types
+        if path.is_file() {
+            result.push(path);
+        }
+    }
+
+    return result;
+}
+
 pub fn handle_reading_file(source: &PathBuf) -> String {
     match read_from_file(source) {
         Ok(contents) => return contents,
