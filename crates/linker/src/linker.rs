@@ -29,7 +29,17 @@ impl ObjectCompiler {
             CODE_MODEL
         ).unwrap();
 
-        let output_name = format!("{}.o", name);
+        let file_name = Path::new(name)
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap();
+        let output_name = if file_name.contains(".alp") {
+            file_name.replace(".alp", ".o")
+        } else {
+            format!("{}.o", file_name)
+        };
+
         let output_path = output_dir.join(std::path::Path::new(&output_name));
         target_machine.write_to_file(module, FileType::Object, &output_path).unwrap();
         return output_path;
@@ -49,7 +59,6 @@ impl ObjectLinker {
             obj_files.extend(runtime_objs);
         }
 
-        println!("Building {}",  output_path);
         //let input = format!("{}.o", module_name);
         let linker_output = std::process::Command::new("cc")
             .args(obj_files.clone())

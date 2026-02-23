@@ -56,24 +56,43 @@ impl<'ctx> CodeGenModules<'ctx> {
         _parallel_compilation: bool,
     ) -> Result<Vec<(String, Module<'ctx>)>, String> {
         let mut modules = Vec::new();
-        // compile all modules
 
-        for (module_name, module) in compilation_unit.modules {
-            if let ModuleEnum::Module(module) = module {
-                let mut codegen = CodeGen::new(&ctx, &module_name);
-                let ast = module.ast;
-                let imports = module.imports;
-                let module_ref = codegen
-                    .compile(&ast, imports)
-                    .unwrap_or_else(|err| panic!("Couldn't compile the program due to: \n{}", err));
-                if module_ref.verify().is_err() {
-                    module_ref.print_to_stderr();
-                    panic!("Invalid LLVM IR");
-                }
-                modules.push((module_name, module_ref.clone()));
-            }
-        }
+        // compile all modules
+        // in all namespaces
+        let root = compilation_unit.get_root_namespace();
+        self.compile_namespace(ctx, root, &mut modules)?;
+
         return Ok(modules);
+    }
+
+    pub fn compile_namespace(
+        &mut self,
+        ctx: &'ctx Context,
+        namespace: ast::Namespace,
+        modules: &mut Vec<(String, Module<'ctx>)>,
+    ) -> Result<(), String> {
+        // compile the root modules
+        for module in namespace.get_all_modules() {
+            let mut codegen = CodeGen::new(&ctx, &get_module_name_from_file(&module.name));
+            let ast = module.ast;
+            let imports = module.imports;
+            let module_ref = codegen.compile(&ast, imports)?;
+            if module_ref.verify().is_err() {
+                module_ref.print_to_stderr();
+                panic!("Invalid LLVM IR");
+            }
+
+            modules.push((module.name, module_ref.clone()));
+        }
+
+        // recursively compile all the modules in every namespace
+        // TODO: Only compile the modules which are used
+        for (_name, space) in namespace.get_all_namespaces() {
+            self.compile_namespace(ctx, space, modules)?;
+        }
+
+        Ok(())
+
     }
 }
 
@@ -456,8 +475,8 @@ impl<'ctx> CodeGen<'ctx> {
             Expr::Binary { left, op, right } => {
                 let ty = left.ty.clone();
 
-                let l = self.compile_expression(left.expr, Some(left.ty))?;
-                let r = self.compile_expression(right.expr, Some(right.ty))?;
+                let l = self.compile_expression(left.expr, Some(left.ty.clone()))?;
+                let r = self.compile_expression(right.expr, Some(left.ty))?;
 
                 use ast::BinaryOp;
 
@@ -1158,7 +1177,7 @@ impl<'ctx> CodeGen<'ctx> {
                                     .as_basic_value_enum()
                             }
 
-                            _ => unimplemented!(),
+                            _ => unimplemented!("equality for {}", ty.to_str()),
                         };
 
                         match expected.unwrap() {
@@ -1769,6 +1788,10 @@ impl<'ctx> CodeGen<'ctx> {
             _ => unimplemented!(),
         }
     }
+
+
+
+
 }
 
 impl<'ctx> CodeGen<'ctx> {
@@ -1815,6 +1838,7 @@ impl<'ctx> CodeGen<'ctx> {
                 is_alien,
             },
         );
+
         Ok(function)
     }
 
@@ -1924,5 +1948,18 @@ impl<'ctx> CodeGen<'ctx> {
             }
         }
         None
+    }
+}
+
+fn get_module_name_from_file(file_name: &str) -> String {
+    // todo:
+    // fix this. this is not maintainable.
+    // lots of hidden bugs
+    let file = std::path::Path::new(file_name);
+    if file.parent().is_some() && file.parent().unwrap().file_name().is_some() {
+        let p = file.parent().unwrap().file_name().unwrap().to_str().unwrap().into();
+        return p;
+    } else {
+        return file.file_stem().unwrap().to_str().unwrap().into();
     }
 }
