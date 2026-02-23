@@ -1,6 +1,7 @@
 use std::{io::Error, process::Output};
 use std::path::{Path, PathBuf}; 
 use utils::get_all_files_in_dir;
+use config::stdlib;
 
 use inkwell::{
     module::Module,
@@ -88,8 +89,8 @@ impl ObjectLinker {
 
     // output is only used to identify if it is windows or linux
     pub fn compile_runtime(module_name: &str) -> Option<Vec<String>> {
-        let runtime_path = "./runtime/c/";
-        let runtime_files = get_all_files_in_dir(runtime_path);
+        let runtime_path = stdlib::runtime_path();
+        let runtime_files = get_all_files_in_dir(runtime_path.to_str().unwrap());
 
         if runtime_files.len() == 0 { return None }
 
