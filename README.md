@@ -45,6 +45,32 @@ Pine has evolved beyond arithmetic and functions into a small but expressive sys
 
 ---
 
+### Getting Started
+
+### Hello World
+
+Create a file `hello_world.alp` with the following contents
+
+```pine
+use io
+
+fn main() {
+    io.println("Hello World!")
+    return 0
+}
+```
+
+#### Compile the program
+use the pine compiler to build the binary
+
+```pine
+pinec build -s hello_world.alp
+````
+
+This will compile, link and produce a binary file `hello_world`
+
+you can run this by `./hello_world`
+
 ### Foreign Function Interface (FFI)
 
 Pine supports calling native functions using the **`alien`** keyword:
@@ -164,7 +190,6 @@ pine/
 
 ---
 
-## Getting Started
 
 ### Write a Pine program
 
