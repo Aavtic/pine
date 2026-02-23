@@ -2,6 +2,7 @@ PREFIX ?= /usr/local/pine
 BINARY = pinec
 BIN_DIR = $(PREFIX)/bin
 LIB_DIR = $(PREFIX)/lib/stdlib
+RUNTIME_DIR = $(PREFIX)/runtime/
 SYMLINK = /usr/local/bin/$(BINARY)
 
 # Added 'clean' to the list
@@ -28,13 +29,15 @@ install: build
 	fi
 
 	sudo install -d $(BIN_DIR)
+	sudo install -d $(RUNTIME_DIR)
 	sudo install -d $(LIB_DIR)
 	sudo install -p -m 755 target/release/$(BINARY) $(BIN_DIR)/$(BINARY)
 	sudo rm -rf $(LIB_DIR)
+	sudo rm -rf $(RUNTIME_DIR)
 	sudo mkdir -p $(LIB_DIR)
-	sudo install -d $(LIB_DIR)
-	sudo cp -r stdlib/* $(LIB_DIR)/
+	sudo mkdir -p $(RUNTIME_DIR)
 	sudo cp -rn stdlib/* $(LIB_DIR)/
+	sudo cp -rn runtime/* $(RUNTIME_DIR)/
 	sudo ln -sfv $(BIN_DIR)/$(BINARY) $(SYMLINK)
 
 debug_install: debug_build
@@ -51,10 +54,14 @@ debug_install: debug_build
 
 	sudo install -d $(BIN_DIR)
 	sudo install -d $(LIB_DIR)
+	sudo install -d $(RUNTIME_DIR)
 	sudo install -p -m 755 target/debug/$(BINARY) $(BIN_DIR)/$(BINARY)
 	sudo rm -rf $(LIB_DIR)
+	sudo rm -rf $(RUNTIME_DIR)
 	sudo mkdir -p $(LIB_DIR)
+	sudo mkdir -p $(RUNTIME_DIR)
 	sudo cp -r stdlib/* $(LIB_DIR)/
+	sudo cp -r runtime/* $(RUNTIME_DIR)/
 
 	sudo ln -sfv $(BIN_DIR)/$(BINARY) $(SYMLINK)
 
@@ -81,3 +88,4 @@ uninstall:
 	sudo rm -f $(BIN_DIR)/$(BINARY)
 	sudo rm -rf $(LIB_DIR)
 	sudo rm -f $(SYMLINK)
+	sudo rm -f $(RUNTIME_DIR)
