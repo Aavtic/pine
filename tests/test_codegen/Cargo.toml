@@ -1,0 +1,13 @@
+[package]
+name = "test_codegen"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+clap = { version = "4.5.51", features = ["derive", "env"] }
+lexer = { path = "../../crates/lexer" }
+parser = { path = "../../crates/parser" }
+analyzer= { path = "../../crates/analyzer" }
+codegen = { path = "../../crates/codegen" }
+linker = { path = "../../crates/linker" }
+utils = { path = "../../crates/utils" }
