@@ -1,26 +1,26 @@
 use io
+use io/pretty;
 use math
-use local
-
-fn square(n: i32) -> i32 {
-    io.println("main square")
-    return n * n
-}
+use time
+use time/convert
 
 fn main() {
-    let number = 3
-    let math_res = math.square(number)
-    let local_res = local.square(number)
-    let main_res = square(number)
+    io.println("Hello world")
+    let pi = math.pi()
+    let sq = math.square(10)
+    pretty.pretty_print("Hello Friend!")
+    io.println("")
 
-    io.print("The square of 3 is: ")
-    io.printd(math_res)
+    io.print("The current time is: ")
+    io.println(time.get_current_time())
 
-    io.print("The square of 3 is: ")
-    io.printd(local_res)
+    let seconds = convert.second("minute")
 
-    io.print("The square of 3 is: ")
-    io.printd(main_res)
+    io.print("Number of seconds in two minute is: ")
+    io.printd(2 * seconds)
 
-    return 0
+    let result = math.add(20, 30)
+    io.printd(result)
+
+    return if pi == 3.14 { 1 } else { 0 }
 }
