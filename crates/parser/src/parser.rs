@@ -1,7 +1,8 @@
-use ast::{DataType, ModuleEnum};
+use ast::DataType;
 //use ast::ast;
+use config::{constants, stdlib};
 use lexer::lexer::{Object, Token, TokenType};
-use config::{stdlib, constants};
+use std::collections::HashSet;
 
 use std::fmt;
 use std::path::PathBuf;
@@ -51,6 +52,7 @@ pub struct Parser {
 
     // file information
     project_dir: PathBuf,
+    visited_files: HashSet<PathBuf>,
 }
 
 impl Parser {
@@ -62,6 +64,7 @@ impl Parser {
             current: 0,
             contains_parse_error: false,
             project_dir,
+            visited_files: HashSet::new(),
         }
     }
 
@@ -71,14 +74,19 @@ impl Parser {
 
     fn reset(&mut self, tokens: Vec<Token>) {
         self.tokens = tokens;
-        self.errors =  Vec::new();
+        self.errors = Vec::new();
         self.current = 0;
         self.contains_parse_error = false;
     }
 }
 
 impl Parser {
-    pub fn parse(&mut self, module_name: &str) -> Result<(), ParseError> {
+    pub fn parse(
+        &mut self,
+        module_name: &str,
+        namespace: Vec<String>,
+        is_main: bool,
+    ) -> Result<(), ParseError> {
         let mut statements = Vec::new();
         while !self.is_end() {
             if let Some(statement) = self.statement() {
@@ -86,12 +94,17 @@ impl Parser {
             }
         }
 
-        // add to compilation_unit
+        //add to compilation_unit
         let module = ast::Module::new(module_name.into(), statements.clone());
-        let module_val = ModuleEnum::Module(module);
-        self.compilation_unit.add_module(module_name.into(), module_val);
-
+        if is_main {
+            self.compilation_unit.add_global(module);
+        } else {
+            self.compilation_unit.add_module(namespace, module);
+        }
+        //
         // parse all import dependencies
+        //
+
         let imports: Vec<_> = statements
             .iter()
             .filter_map(|stmt| {
@@ -100,15 +113,16 @@ impl Parser {
                 } else {
                     None
                 }
-            }).collect();
-
+            })
+            .collect();
 
         for import in imports {
-            let file_name = self.resolve_import_path(import.import_name.clone())?;
-            let source = handle_reading_file(&std::path::PathBuf::from(file_name));
-            let tokens = lexer::lexer::lex(&source);
-            self.reset(tokens);
-            self.parse(&import.import_name)?;
+            let space = import.import_namespace.clone();
+            // Get all the files in namespace
+            let files = self.resolve_namespace(&space)?;
+            for file in files {
+                self.parse_file(file, space.clone())?;
+            }
         }
 
         Ok(())
@@ -432,18 +446,27 @@ impl Parser {
     }
 
     fn import_statement(&mut self) -> Result<ast::ImportStmt, ParseError> {
-        let import_name = self
-            .consume(
-                TokenType::Identifier,
-                "import value expected after `import` statement",
-            )?
-            .lexeme;
+        let mut import_namespace = Vec::new();
+        loop {
+            let import_name = self
+                .consume(
+                    TokenType::Identifier,
+                    "import value expected after `import` statement",
+                )?
+                .lexeme;
+
+            import_namespace.push(import_name);
+
+            if !matches_token!(self, TokenType::Slash) {
+                break;
+            }
+        }
 
         if self.check(TokenType::SemiColon) {
             self.advance();
         }
 
-        return Ok(ast::ImportStmt { import_name });
+        return Ok(ast::ImportStmt { import_namespace });
     }
 
     fn return_statement(&mut self) -> Result<ast::ReturnStmt, ParseError> {
@@ -1004,7 +1027,6 @@ impl Parser {
     }
 }
 
-
 impl Parser {
     fn resolve_import_path(&self, name: String) -> Result<PathBuf, ParseError> {
         let file = name.clone() + constants::PINE_EXTENSION;
@@ -1023,6 +1045,48 @@ impl Parser {
 
         // error out
 
-        Err(ParseError::ParseError(format!("Could not find module: {}. Not part of standard library or present in current directory", name), 69, 69))
+        Err(ParseError::ParseError(
+            format!(
+                "Could not find module: {}. Not part of standard library or present in current directory",
+                name
+            ),
+            69,
+            69,
+        ))
+    }
+
+    fn resolve_namespace(&mut self, namespaces: &Vec<String>) -> Result<Vec<PathBuf>, ParseError> {
+        // todo add current dir/user defined namespaces
+        // check stdlib
+        let mut namespace_root = stdlib::stdlib_path();
+        for namespace in namespaces {
+            namespace_root.push(namespace);
+        }
+
+        if namespace_root.exists() {
+            Ok(utils::get_all_files_in_dir_as_path(
+                namespace_root.as_os_str().to_str().unwrap(),
+            ))
+        } else {
+            Err(ParseError::ParseError(
+                format!("Could not find module: {:?}", namespace_root),
+                69,
+                69,
+            ))
+        }
+    }
+
+    fn parse_file(&mut self, file: PathBuf, namespace: Vec<String>) -> Result<(), ParseError> {
+        if self.visited_files.contains(&file) {
+            return Ok(());
+        }
+        self.visited_files.insert(file.clone());
+
+        let source = handle_reading_file(&file);
+        let tokens = lexer::lexer::lex(&source);
+        self.reset(tokens);
+        self.parse(&file.to_str().unwrap(), namespace, false)?;
+
+        Ok(())
     }
 }
