@@ -1,0 +1,5 @@
+use io
+
+fn pretty_print(s: str) -> i32 {
+    io.print(s)
+}
