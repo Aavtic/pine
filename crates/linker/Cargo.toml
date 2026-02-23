@@ -5,4 +5,5 @@ edition = "2024"
 
 [dependencies]
 utils = { path = "../../crates/utils" }
+config = { path = "../../crates/config" }
 inkwell = { version = "0.7.0", features = ["llvm21-1"] }
