@@ -78,7 +78,57 @@ let name = read("Enter your name:")
 println(name)
 ```
 
+## Installation Guide
+
+### Requirements
+
+* Rust (with `cargo`) installed
+* `make`
+
 ---
+
+## Install (Release Build)
+
+This builds Pine in release mode and installs it system-wide:
+
+```bash
+make install
+```
+
+You can now run:
+
+```bash
+pinec
+```
+
+from anywhere
+
+---
+
+## Uninstall
+
+To completely remove Pine from your system:
+
+```bash
+make uninstall
+```
+
+---
+
+## ⚙ Custom Installation Prefix
+
+By default, Pine installs to:
+
+```
+/usr/local/pine
+```
+
+You can override this:
+
+```bash
+make install PREFIX=/your/custom/path
+```
+
 
 ## Compilation Pipeline
 
