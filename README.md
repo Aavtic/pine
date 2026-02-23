@@ -51,7 +51,7 @@ Pine has evolved beyond arithmetic and functions into a small but expressive sys
 
 Create a file `hello_world.alp` with the following contents
 
-```pine
+```rust
 use io
 
 fn main() {
@@ -71,6 +71,8 @@ This will compile, link and produce a binary file `hello_world`
 
 you can run this by `./hello_world`
 
+---
+
 ### Foreign Function Interface (FFI)
 
 Pine supports calling native functions using the **`alien`** keyword:
@@ -87,7 +89,7 @@ This enables direct interoperability with C (and other C-ABI languages).
 
 Example wrappers:
 
-```pine
+```rust
 fn print(s: str) {
     pine_print(s)
 }
@@ -99,7 +101,7 @@ fn println(s: str) {
 
 You can also read input:
 
-```pine
+```rust
 let name = read("Enter your name:")
 println(name)
 ```
@@ -195,7 +197,7 @@ pine/
 
 Create a file with the `.alp` extension:
 
-```pine
+```rust
 fn add(n1: i32, n2: i32) -> i32 {
     return n1 + n2
 }
@@ -316,7 +318,7 @@ Useful for:
 
 ### String Comparison
 
-```pine
+```rust
 fn main() {
     let a = "hello"
     let b = "world"
@@ -341,18 +343,6 @@ fn main() {
         return 1
     }
 
-    return 0
-}
-```
-
----
-
-### Interactive Input (requires alien function definition)
-
-```pine
-fn main() {
-    let res = read("Are you a one or a zero?")
-    println(res)
     return 0
 }
 ```
