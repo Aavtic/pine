@@ -249,6 +249,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "parser_test"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "lexer",
+ "parser",
+ "utils",
+]
+
+[[package]]
 name = "pinec"
 version = "0.1.0"
 dependencies = [
@@ -312,6 +322,30 @@ dependencies = [
  "proc-macro2",
  "quote",
  "unicode-ident",
+]
+
+[[package]]
+name = "test_analyzer"
+version = "0.1.0"
+dependencies = [
+ "analyzer",
+ "clap",
+ "lexer",
+ "parser",
+ "utils",
+]
+
+[[package]]
+name = "test_codegen"
+version = "0.1.0"
+dependencies = [
+ "analyzer",
+ "clap",
+ "codegen",
+ "lexer",
+ "linker",
+ "parser",
+ "utils",
 ]
 
 [[package]]
