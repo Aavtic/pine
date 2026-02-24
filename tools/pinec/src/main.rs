@@ -202,7 +202,7 @@ fn build_object(file: PathBuf) {
     let mut parser = Parser::new(tokens, parent);
     let namespace = vec!["main".into()];
     parser
-        .parse("main", namespace.clone(), true)
+        .parse(PROJECT_ROOT, namespace.clone(), true)
         .unwrap_or_else(|err| panic!("Couldn't parse the program due to: \n{}", err));
 
     //let mut ast = parser.get_compilation_unit().get_module("main").unwrap().ast.clone();
@@ -221,9 +221,6 @@ fn build_object(file: PathBuf) {
         .map(|n| n.to_string())
         .unwrap_or(file_name.replace(".alp", ""));
 
-    let ctx = CodeGen::create_context();
-    let mut codegen = CodeGen::new(&ctx, &module_name);
-    //println!("{:#?}", &ast);
 
     let ctx = CodeGen::create_context();
     let mut codegen_mod = CodeGenModules::new();
@@ -237,15 +234,6 @@ fn build_object(file: PathBuf) {
         linker::ObjectCompiler::compile_module(&module, &name, file.parent().unwrap());
     }
     linker::ObjectLinker::compile_runtime(&module_name);
-
-    // Don't verify object because they may not be complete
-    //if module_ref.verify().is_err() {
-    //    module_ref.print_to_stderr();
-    //    panic!("Invalid LLVM IR");
-    //}
-
-    //linker::ObjectCompiler::compile_module(&module_ref, &module_name);
-    //linker::ObjectLinker::link(&module_name, &module_name).unwrap();
 }
 
 fn print_tokens(file: PathBuf) {

@@ -226,10 +226,6 @@ fn build_object(file: PathBuf) {
         .unwrap_or(file_name.replace(".alp", ""));
 
     let ctx = CodeGen::create_context();
-    let mut codegen = CodeGen::new(&ctx, &module_name);
-    //println!("{:#?}", &ast);
-
-    let ctx = CodeGen::create_context();
     let mut codegen_mod = CodeGenModules::new();
     let modules =  codegen_mod.compile(&ctx, compilation_unit.clone(), false)
         .unwrap_or_else(|err| {
