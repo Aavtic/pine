@@ -1,26 +1,28 @@
 use io
 use io/pretty;
 use math
+use math/constants
 use time
 use time/convert
 
 fn main() {
-    io.println("Hello world")
-    let pi = math.pi()
-    let sq = math.square(10)
-    pretty.pretty_print("Hello Friend!")
-    io.println("")
+    io.println("Hello From Pine!")
 
-    io.print("The current time is: ")
+    let side = 10
+    let area = math.square(side)
+    io.print("The area of the square is :")
+    io.printd(area)
+
+    io.println("Value of pi:")
+    io.printf(constants.pi())
+
+    io.print("The current time:")
     io.println(time.get_current_time())
 
-    let seconds = convert.second("minute")
 
-    io.print("Number of seconds in two minute is: ")
-    io.printd(2 * seconds)
+    io.print("Seconds in an hour: ")
+    io.printd(convert.second("hour"))
 
-    let result = math.add(20, 30)
-    io.printd(result)
 
-    return if pi == 3.14 { 1 } else { 0 }
-}
+    return 0
+
