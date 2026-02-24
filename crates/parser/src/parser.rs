@@ -94,6 +94,12 @@ impl Parser {
             }
         }
 
+        // todo: return Vec<ParseError>
+        if self.contains_parse_error {
+            eprintln!("Error, Could not parse program due to: {:#?}", self.errors);
+            panic!()
+        }
+
         //add to compilation_unit
         let module = ast::Module::new(module_name.into(), statements.clone());
         if is_main {
