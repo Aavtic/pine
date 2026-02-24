@@ -14,7 +14,7 @@ macro_rules! const_assert {
 }
 const_assert!(INBUILT_FUNCTIONS.len() == INBUILT_FUNCTIONS_TO_ABI.len());
 
-use ast::{DataType, Expr, ImportType, Literal, ModuleEnum, Statement, TypeEnv};
+use ast::{DataType, Expr, Imports, NamespaceType, Literal, Statement};
 
 use inkwell::{
     AddressSpace, FloatPredicate, IntPredicate,
@@ -56,11 +56,12 @@ impl<'ctx> CodeGenModules<'ctx> {
         _parallel_compilation: bool,
     ) -> Result<Vec<(String, Module<'ctx>)>, String> {
         let mut modules = Vec::new();
+        let mut root_path = Vec::new();
 
         // compile all modules
         // in all namespaces
         let root = compilation_unit.get_root_namespace();
-        self.compile_namespace(ctx, root, &mut modules)?;
+        self.compile_namespace(ctx, root, &mut root_path, &mut modules)?;
 
         return Ok(modules);
     }
@@ -69,11 +70,12 @@ impl<'ctx> CodeGenModules<'ctx> {
         &mut self,
         ctx: &'ctx Context,
         namespace: ast::Namespace,
+        namespace_path: &mut NamespaceType,
         modules: &mut Vec<(String, Module<'ctx>)>,
     ) -> Result<(), String> {
         // compile the root modules
         for module in namespace.get_all_modules() {
-            let mut codegen = CodeGen::new(&ctx, &get_module_name_from_file(&module.name));
+            let mut codegen = CodeGen::new(&ctx, &get_module_name_from_file(&module.name), namespace_path);
             let ast = module.ast;
             let imports = module.imports;
             let module_ref = codegen.compile(&ast, imports)?;
@@ -87,8 +89,10 @@ impl<'ctx> CodeGenModules<'ctx> {
 
         // recursively compile all the modules in every namespace
         // TODO: Only compile the modules which are used
-        for (_name, space) in namespace.get_all_namespaces() {
-            self.compile_namespace(ctx, space, modules)?;
+        for (name, space) in namespace.get_all_namespaces() {
+            namespace_path.push(name);
+            self.compile_namespace(ctx, space, namespace_path, modules, )?;
+            namespace_path.pop().unwrap();
         }
 
         Ok(())
@@ -103,12 +107,15 @@ pub struct CodeGen<'ctx> {
 
     variables: HashMap<String, Variable<'ctx>>,
     functions: HashMap<String, Function<'ctx>>,
-    imports: ImportType,
+    imports: Imports,
     //variables: HashMap<String, >
     current_fn: Option<Function<'ctx>>,
 
     // maintain the loop stack (for use by continue and break)
     loop_stack: Vec<(BasicBlock<'ctx>, BasicBlock<'ctx>)>,
+
+    // namespace of the this module: for unique symbol creation
+    namespace: NamespaceType
 }
 
 impl<'ctx> CodeGen<'ctx> {
@@ -117,7 +124,7 @@ impl<'ctx> CodeGen<'ctx> {
         inkwell::context::Context::create()
     }
 
-    pub fn new(context: &'ctx Context, module_name: &str) -> Self {
+    pub fn new(context: &'ctx Context, module_name: &str, namespace: &NamespaceType) -> Self {
         let module = context.create_module(module_name);
         let builder = context.create_builder();
 
@@ -138,7 +145,7 @@ impl<'ctx> CodeGen<'ctx> {
 
         let variables = HashMap::new();
         let functions = HashMap::new();
-        let imports = ImportType::new();
+        let imports = Imports::new();
         let loop_stack = Vec::new();
         let current_fn = None;
 
@@ -151,13 +158,15 @@ impl<'ctx> CodeGen<'ctx> {
             imports,
             current_fn,
             loop_stack,
+            // TODO: try to make it a reference
+            namespace: namespace.clone(),
         }
     }
 
     pub fn compile(
         &mut self,
         statements: &Vec<Statement>,
-        imports: ImportType,
+        imports: Imports,
     ) -> Result<&Module<'ctx>, String> {
         // Populate all the imports
         // To Only declare them, on demand
@@ -175,7 +184,7 @@ impl<'ctx> CodeGen<'ctx> {
                 }
 
                 self.declare_function(
-                    &self.heirarchial_fn_name(self.module.get_name().to_str().unwrap(), fn_name),
+                    &self.heirarchial_fn_name(&self.namespace, fn_name),
                     input.as_slice(),
                     &ret_type,
                     false,
@@ -261,8 +270,8 @@ impl<'ctx> CodeGen<'ctx> {
                 //    .get(&fn_name.lexeme)
                 let function = self
                     .get_function(&self.heirarchial_fn_name(
-                        self.module.get_name().to_str().unwrap(),
-                        &fn_name.lexeme,
+                            &self.namespace,
+                            &fn_name.lexeme,
                     ))
                     .cloned()
                     .ok_or_else(|| format!("Function {} is not declared", fn_name.lexeme))?;
@@ -1443,7 +1452,7 @@ impl<'ctx> CodeGen<'ctx> {
                             //.functions
                             //.get(&name)
                             .get_function(
-                                &self.heirarchial_fn_name(self.module.get_name().to_str().unwrap(), &name),
+                                &self.heirarchial_fn_name(&self.namespace, &name),
                             )
                             .cloned()
                             .ok_or_else(|| format!("Undefined function: {}", name))?
@@ -1482,32 +1491,32 @@ impl<'ctx> CodeGen<'ctx> {
                 }
 
                 let module_namespace = self.imports.get(&module_name).unwrap();
-                let func_type = if module_namespace.get(&name).is_none() {
+                let func_type = if module_namespace.get_import(&name).is_none() {
                     return Err(format!(
                         "Could not find {} in this {}'s scope.",
                         name, module_name
                     ));
                 } else {
-                    module_namespace.get(&name).unwrap().clone()
+                    module_namespace.get_import(&name).unwrap().clone()
                 };
 
                 if let DataType::Function { params, ret_type } = func_type {
                     // Declare the function on demand
                     let function =
                         if self.functions.contains_key(&self.heirarchial_fn_name(
-                                &module_name,
+                                &module_namespace.get_namespace(),
                                 &name,
                             )) {
                             self.get_function(&self.heirarchial_fn_name(
-                                &module_name,
-                                &name,
+                                    &module_namespace.get_namespace(),
+                                    &name,
                             ))
                             .unwrap()
                             .value
                         } else {
                             self.declare_function(
                                 &self.heirarchial_fn_name(
-                                    &module_name,
+                                    &module_namespace.get_namespace(),
                                     &name,
                                 ),
                                 &params,
@@ -1934,11 +1943,11 @@ impl<'ctx> CodeGen<'ctx> {
         INBUILT_FUNCTIONS_TO_ABI[INBUILT_FUNCTIONS.iter().position(|&x| x == name).unwrap()]
     }
 
-    fn heirarchial_fn_name(&self, parent: &str, name: &str) -> String {
+    fn heirarchial_fn_name(&self, parent: &NamespaceType, name: &str) -> String {
         if name == "main" {
             return name.to_string();
         }
-        return parent.to_string() + "_" + name;
+        return parent.join("_") + "_" +  name;
     }
 
     fn check_is_function_alien(&self, name: &str) -> Option<&Function<'ctx>> {
