@@ -1,11 +1,13 @@
 use io
 
 fn second(other: str) -> i32 {
-    io.print("other: ")
+    let seconds_in_minute = 60
     io.println(other)
     if other == "minute" {
-        return 60
+        return seconds_in_minute
+    } else if other == "hour" {
+        return seconds_in_minute * 60
+    } else {
+        return 0
     }
-
-    return 0
 }

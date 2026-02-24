@@ -7,3 +7,7 @@ int pine_println(const char* s) {
 int pine_println_int(int d) {
     return printf("%d\n", d);
 }
+
+int pine_println_float(float f) {
+    return printf("%f\n", f);
+}
