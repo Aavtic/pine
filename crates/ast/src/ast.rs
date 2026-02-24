@@ -4,10 +4,38 @@ use std::collections::HashMap;
 use crate::DataType;
 
 // For use in the analyzer for type checking
-pub type TypeEnv = HashMap<String, DataType>;
-
 // Import with namespacing
-pub type ImportType = HashMap<String, TypeEnv>;
+pub type NamespaceType = Vec<String>;
+// String: the top level name for the namespace given E.g use io/pretty -> pretty
+pub type TypeEnv = HashMap<String, DataType>;
+pub type Imports = HashMap<String, Import>;
+#[derive(Debug, Clone)]
+pub struct Import {
+    // NamespaceType: the full namespace which is resolved: io/pretty
+    pub namespace: NamespaceType,
+    pub imports: TypeEnv,
+}
+
+impl Import {
+    fn new(namespace: NamespaceType, imports: TypeEnv) -> Self {
+        return Self {
+            namespace,
+            imports,
+        }
+    }
+
+    fn insert_import(&mut self, import: TypeEnv) {
+        self.imports.extend(import)
+    }
+
+    pub fn get_import(&self, name: &String) -> Option<&DataType> {
+        self.imports.get(name)
+    }
+
+    pub fn get_namespace(&self) -> NamespaceType {
+        self.namespace.clone()
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct Namespace {
@@ -103,7 +131,8 @@ impl Namespace {
 pub struct Module {
     pub name: String,
     pub ast: Vec<Statement>,
-    pub imports: ImportType,
+    // String: Top level namespace name
+    pub imports: Imports,
     pub exports: TypeEnv,
     //pub lookup_table: 
 }
@@ -205,14 +234,21 @@ impl Module {
     pub fn new(name: String,  ast: Vec<Statement>) -> Self {
         Self {
             name,
-            imports: ImportType::new(),
+            imports: HashMap::new(),
             exports: TypeEnv::new(),
             ast,
         }
     }
 
-    pub fn add_imports(&mut self, name: String, import: TypeEnv) {
-        self.imports.insert(name, import);
+    pub fn add_imports(&mut self, name: String, import: TypeEnv, namespace: NamespaceType) {
+        if self.imports.contains_key(&name) {
+            self.imports
+                .get_mut(&name)
+                .unwrap()
+                .insert_import(import);
+        } else {
+            self.imports.insert(name, Import::new(namespace, import));
+        }
     }
 
     pub fn add_exports(&mut self, exports: TypeEnv) {
