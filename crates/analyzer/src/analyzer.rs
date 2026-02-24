@@ -1,6 +1,6 @@
 use ast::Statement;
 use ast::types::DataType;
-use ast::{BinaryOp, Expr, ImportType, Literal, Namespace, TypeEnv, UnaryOp};
+use ast::{BinaryOp, Expr, Imports, Literal, Namespace, TypeEnv, UnaryOp};
 
 pub const INBUILT_FUNCTIONS: [&str; 2] = ["print", "println"];
 
@@ -11,7 +11,7 @@ enum NamespaceType {
 
 pub struct Analyzer {
     pub loop_nest_level: i32,
-    pub imports: ImportType,
+    pub imports: Imports,
     pub exports: TypeEnv,
 }
 
@@ -19,14 +19,14 @@ impl Analyzer {
     pub fn new() -> Self {
         return Self {
             loop_nest_level: 0,
-            imports: ImportType::new(),
+            imports: Imports::new(),
             exports: TypeEnv::new(),
         };
     }
 
     pub fn reset(&mut self) {
         self.loop_nest_level = 0;
-        self.imports = ImportType::new();
+        self.imports = Imports::new();
         self.exports = TypeEnv::new();
     }
 
@@ -92,7 +92,7 @@ impl Analyzer {
             let module = namespace
                 .get_module_by_path_mut(&link.source_mod)
                 .ok_or_else(|| format!("Could not find module: {:?}", &link.source_mod))?;
-            module.add_imports(link.require_mod.last().unwrap().into(), exports);
+            module.add_imports(link.require_mod.last().unwrap().into(), exports, link.require_mod);
         }
 
         Ok(())
@@ -141,7 +141,7 @@ impl Analyzer {
     }
 
     fn analyze_exports(&mut self, modu: &mut ast::Module) -> Result<(), String> {
-        self.analyze(&mut modu.ast, ImportType::new(), AnalysisMode::Exports)?;
+        self.analyze(&mut modu.ast, Imports::new(), AnalysisMode::Exports)?;
         let exports = self.get_exports();
         modu.add_exports(exports);
         self.reset();
@@ -160,7 +160,7 @@ impl Analyzer {
     fn analyze(
         &mut self,
         ast: &mut Vec<Statement>,
-        imports: ImportType,
+        imports: Imports,
         mode: AnalysisMode,
     ) -> Result<(), String> {
         let mut env = TypeEnv::new();
@@ -490,13 +490,13 @@ impl Analyzer {
                 }
 
                 let module_namespace = self.imports.get(&module_name).unwrap();
-                let func_type = if module_namespace.get(&name).is_none() {
+                let func_type = if module_namespace.get_import(&name).is_none() {
                     return Err(format!(
                         "Could not find {} in {}'s scope.",
                         name, module_name
                     ));
                 } else {
-                    module_namespace.get(&name).unwrap().clone()
+                    module_namespace.get_import(&name).unwrap().clone()
                 };
 
                 if let DataType::Function { params, ret_type } = func_type {
@@ -599,7 +599,7 @@ impl Analyzer {
 }
 
 impl Analyzer {
-    fn get_imports(&self) -> ImportType {
+    fn get_imports(&self) -> Imports {
         self.imports.clone()
     }
 
