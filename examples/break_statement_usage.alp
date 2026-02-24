@@ -1,9 +1,11 @@
+use io
+
 fn main() {
     let state = ""
     println("Welcome to the Pine Interpreter")
     while state != "quit" {
         println("first loop")
-        state = read(">>")
+        state = io.read(">>")
         if state == "exit" {
             while true {
                 println("second loop")
@@ -18,15 +20,4 @@ fn main() {
     println("Bye!")
 
     return 0
-}
-
-alien "c" fn pine_read_line_stdin(s: str) -> str
-alien "c" fn pine_println(s: str) -> i32
-
-fn read(s: str) -> str {
-    pine_read_line_stdin(s)
-}
-
-fn println(s: str) -> i32 {
-    pine_println(s)
 }
