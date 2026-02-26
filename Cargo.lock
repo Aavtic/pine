@@ -143,6 +143,10 @@ name = "config"
 version = "0.1.0"
 
 [[package]]
+name = "errors"
+version = "0.1.0"
+
+[[package]]
 name = "find-msvc-tools"
 version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
