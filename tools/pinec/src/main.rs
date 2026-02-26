@@ -112,7 +112,14 @@ fn build_ast(source_path: PathBuf) {
     let parent = PathBuf::from(source_path.parent().expect("Unable to find parent for source file"));
     let mut parser = Parser::new(tokens, parent);
 
-    parser.parse(PROJECT_ROOT, vec![PROJECT_ROOT.into()], true).unwrap_or_else(|err| panic!("Couldn't parse the program due to: \n{}", err));
+    let namespace = vec!["main".into()];
+    parser
+        .parse(PROJECT_ROOT, namespace.clone(), true)
+        .unwrap_or_else(|err| {
+            eprintln!("Couldn't parse the program due to: \n{}", err);
+            return;
+        });
+
     let ast = parser.get_compilation_unit();
 
     println!("{:#?}", ast);
@@ -154,7 +161,10 @@ fn build_llvm_ir(file: PathBuf) {
     let namespace = vec!["main".into()];
     parser
         .parse(PROJECT_ROOT, namespace.clone(), true)
-        .unwrap_or_else(|err| panic!("Couldn't parse the program due to: \n{}", err));
+        .unwrap_or_else(|err| {
+            eprintln!("Couldn't parse the program due to: \n{}", err);
+            return;
+        });
 
     //let mut ast = parser.get_compilation_unit().get_module("main").unwrap().ast.clone();
     let mut compilation_unit = parser.get_compilation_unit().clone();
@@ -164,14 +174,6 @@ fn build_llvm_ir(file: PathBuf) {
         eprintln!("Type Check failed due to:\n{}", err);
         return;
     }
-
-    let file_name = file.to_str().unwrap();
-    let module_name = file_name
-        .split(".")
-        .next()
-        .map(|n| n.to_string())
-        .unwrap_or(file_name.replace(".alp", ""));
-
 
     let ctx = CodeGen::create_context();
     let mut codegen_mod = CodeGenModules::new();
@@ -203,7 +205,10 @@ fn build_object(file: PathBuf) {
     let namespace = vec!["main".into()];
     parser
         .parse(PROJECT_ROOT, namespace.clone(), true)
-        .unwrap_or_else(|err| panic!("Couldn't parse the program due to: \n{}", err));
+        .unwrap_or_else(|err| {
+            eprintln!("Couldn't parse the program due to: \n{}", err);
+            return;
+        });
 
     //let mut ast = parser.get_compilation_unit().get_module("main").unwrap().ast.clone();
     let mut compilation_unit = parser.get_compilation_unit().clone();
@@ -253,7 +258,10 @@ fn compile_program(file: PathBuf) {
     let namespace = vec!["main".into()];
     parser
         .parse(PROJECT_ROOT, namespace.clone(), true)
-        .unwrap_or_else(|err| panic!("Couldn't parse the program due to: \n{}", err));
+        .unwrap_or_else(|err| {
+            eprintln!("Couldn't parse the program due to: \n{}", err);
+            return;
+        });
 
     //let mut ast = parser.get_compilation_unit().get_module("main").unwrap().ast.clone();
     let mut compilation_unit = parser.get_compilation_unit().clone();
