@@ -9,6 +9,7 @@ pub type NamespaceType = Vec<String>;
 // String: the top level name for the namespace given E.g use io/pretty -> pretty
 pub type TypeEnv = HashMap<String, DataType>;
 pub type Imports = HashMap<String, Import>;
+
 #[derive(Debug, Clone)]
 pub struct Import {
     // NamespaceType: the full namespace which is resolved: io/pretty
@@ -266,9 +267,9 @@ impl Module {
 pub struct Link {
     // source module name
     // the last element represents module name and the rest are part of namespace
-    pub source_mod: Vec<String>,
+    pub source_mod: NamespaceType,
     // require module name, needs to be vec to resolve namespace
-    pub require_mod: Vec<String>,
+    pub require_mod: NamespaceType,
 }
 
 #[derive(Debug, Clone)]
@@ -661,4 +662,8 @@ pub mod ast_printer {
             _ => unimplemented!(),
         }
     }
+}
+
+pub fn namespace_to_string(namespace: &NamespaceType) -> String {
+    return namespace.join("/");
 }

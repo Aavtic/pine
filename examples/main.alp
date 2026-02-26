@@ -1,28 +1,10 @@
 use io
-use io/pretty;
 use math
-use math/constants
-use time
 use time/convert
 
 fn main() {
-    io.println("Hello From Pine!")
-
-    let side = 10
-    let area = math.square(side)
-    io.print("The area of the square is :")
-    io.printd(area)
-
-    io.println("Value of pi:")
-    io.printf(constants.pi())
-
-    io.print("The current time:")
-    io.println(time.get_current_time())
-
-
-    io.print("Seconds in an hour: ")
-    io.printd(convert.second("hour"))
-
+    io.println("Hello Friend")
+    io.println("Hello Friend!")
 
     return 0
 }
