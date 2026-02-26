@@ -1,6 +1,7 @@
 use ast::Statement;
 use ast::types::DataType;
 use ast::{BinaryOp, Expr, Imports, Literal, Namespace, TypeEnv, UnaryOp};
+use errors::errors::{ErrorMsg, ErrorCreation, IntoError};
 
 pub const INBUILT_FUNCTIONS: [&str; 2] = ["print", "println"];
 
@@ -39,7 +40,8 @@ impl Analyzer {
     pub fn start_analysis(
         &mut self,
         compilation_unit: &mut ast::CompilationUnit,
-    ) -> Result<(), String> {
+    ) -> Result<(), ErrorMsg> {
+        let mut namespace_vec: ast::NamespaceType = vec![compilation_unit.get_root_namespace_mut().get_name()];
         // populate exports for each module
         self.populate_exports(compilation_unit.get_root_namespace_mut())?;
 
@@ -47,15 +49,20 @@ impl Analyzer {
         self.populate_imports(compilation_unit.get_root_namespace_mut())?;
 
         // analyze every modules
-        self.run_analysis(compilation_unit.get_root_namespace_mut())?;
+        // namespace_vec is used to track the Namespace but in a list
+        // this is used for printing the namespace for warnings or errors
+        // This method is a little dirty
+        self.run_analysis(compilation_unit.get_root_namespace_mut(), &mut namespace_vec)?;
 
         Ok(())
     }
 
-    fn run_analysis(&mut self, space: &mut Namespace) -> Result<(), String> {
+    fn run_analysis(&mut self, space: &mut Namespace, _namespace_vec: &mut ast::NamespaceType) -> Result<(), ErrorMsg> {
+        self.package_name = ast::namespace_to_string(_namespace_vec);
         let modules = space.get_all_modules_mut();
 
         for module in modules.iter_mut() {
+            self.module_name = module.name.clone();
             self.analyze(
                 &mut module.ast,
                 module.imports.clone(),
@@ -65,13 +72,15 @@ impl Analyzer {
         }
 
         for (_, space) in space.get_all_namespaces_mut() {
-            self.run_analysis(space)?;
+            _namespace_vec.push(space.get_name());
+            self.run_analysis(space, _namespace_vec)?;
+            _namespace_vec.pop();
         }
 
         Ok(())
     }
 
-    fn populate_imports(&mut self, space: &mut Namespace) -> Result<(), String> {
+    fn populate_imports(&mut self, space: &mut Namespace) -> Result<(), ErrorMsg> {
         let links = self.collect_imports(space.clone(), &mut Vec::new());
         self.link_imports(links, space)?;
 
@@ -82,12 +91,21 @@ impl Analyzer {
         &mut self,
         links: Vec<ast::Link>,
         namespace: &mut Namespace,
-    ) -> Result<(), String> {
+    ) -> Result<(), ErrorMsg> {
         for link in links {
             let exports = {
                 let space = namespace
                     .get_namespace(&link.require_mod)
-                    .ok_or_else(|| format!("Could not find module: {:?}", &link.require_mod))?;
+                    .ok_or_else(|| format!("Could not find module: {:?}", ast::namespace_to_string(&link.require_mod)))
+                    .map_err(|err| {
+                        err
+                            .create_error()
+                            .add_line(69)
+                            .add_column(69)
+                            .add_file_name(link.source_mod.last().unwrap())
+                            .add_package_name(&ast::namespace_to_string(&link.source_mod))
+                            .clone()
+                    })?;
                 let mut exp = TypeEnv::new();
                 for module in space.get_all_modules() {
                     exp.extend(module.exports);
@@ -97,7 +115,14 @@ impl Analyzer {
 
             let module = namespace
                 .get_module_by_path_mut(&link.source_mod)
-                .ok_or_else(|| format!("Could not find module: {:?}", &link.source_mod))?;
+                .ok_or_else(|| format!("Could not find module: {:?}", &link.source_mod)
+                            .create_error()
+                            .add_line(69)
+                            .add_column(69)
+                            .add_file_name(link.source_mod.last().unwrap())
+                            .add_package_name(&ast::namespace_to_string(&link.source_mod))
+                            .clone()
+                )?;
             module.add_imports(link.require_mod.last().unwrap().into(), exports, link.require_mod);
         }
 
@@ -135,7 +160,7 @@ impl Analyzer {
         links
     }
     
-    fn populate_exports(&mut self, namespace: &mut Namespace) -> Result<(), String> {
+    fn populate_exports(&mut self, namespace: &mut Namespace) -> Result<(), ErrorMsg> {
         for module in namespace.get_all_modules_mut() {
             self.analyze_exports(module)?;
         }
@@ -146,7 +171,7 @@ impl Analyzer {
         Ok(())
     }
 
-    fn analyze_exports(&mut self, modu: &mut ast::Module) -> Result<(), String> {
+    fn analyze_exports(&mut self, modu: &mut ast::Module) -> Result<(), ErrorMsg> {
         self.analyze(&mut modu.ast, Imports::new(), AnalysisMode::Exports)?;
         let exports = self.get_exports();
         modu.add_exports(exports);
@@ -168,7 +193,7 @@ impl Analyzer {
         ast: &mut Vec<Statement>,
         imports: Imports,
         mode: AnalysisMode,
-    ) -> Result<(), String> {
+    ) -> Result<(), ErrorMsg> {
         let mut env = TypeEnv::new();
         self.imports = imports;
         // part of exports
@@ -224,7 +249,7 @@ impl Analyzer {
         &mut self,
         stmt: &mut Statement,
         env: &mut TypeEnv,
-    ) -> Result<DataType, String> {
+    ) -> Result<DataType, ErrorMsg> {
         match stmt {
             Statement::FunctionDefinition(fndef) => {
                 // Create a local env with parameters
@@ -241,7 +266,16 @@ impl Analyzer {
 
                 // Verify return type matches (if not Unknown)
                 if fndef.ret_type != DataType::Unknown && body_type != DataType::Void {
-                    let _ = fndef.ret_type.unify(&body_type)?;
+                    let _ = fndef.ret_type.unify(&body_type)
+                        .map_err(|err| {
+                        err
+                            .create_error()
+                            .add_line(69)
+                            .add_column(69)
+                            .add_file_name(&self.module_name)
+                            .add_package_name(&self.package_name)
+                            .clone()
+                    });
                 }
 
                 // Look into this
@@ -257,20 +291,43 @@ impl Analyzer {
                 if self.loop_nest_level > 0 {
                     return Ok(DataType::Unit);
                 }
-                Err(format!("Break statement is only allowed inside loop"))
+                Err(format!("Break statement is only allowed inside loop")
+                            .create_error()
+                            .add_line(69)
+                            .add_column(69)
+                            .add_file_name(&self.module_name)
+                            .add_package_name(&self.package_name)
+                            .clone()
+                )
             }
 
             Statement::Continue(_) => {
                 if self.loop_nest_level > 0 {
                     return Ok(DataType::Unit);
                 }
-                Err(format!("Continue statement is only allowed inside loop"))
+                Err(
+                    format!("Continue statement is only allowed inside loop")
+                            .create_error()
+                            .add_line(69)
+                            .add_column(69)
+                            .add_file_name(&self.module_name)
+                            .add_package_name(&self.package_name)
+                            .clone()
+                )
             }
 
             Statement::VariableDeclaration(vardecl) => {
                 self.typecheck_expr(&mut vardecl.value, env)?;
                 let var_type = if let Some(ann) = vardecl.data_type.clone() {
-                    let _ = ann.unify(&vardecl.value.ty)?;
+                    let _ = ann.unify(&vardecl.value.ty).map_err(|err| {
+                        err
+                            .create_error()
+                            .add_line(69)
+                            .add_column(69)
+                            .add_file_name(&self.module_name)
+                            .add_package_name(&self.package_name)
+                            .clone()
+                    });
                     ann.clone()
                 } else {
                     vardecl.value.ty.clone()
@@ -290,16 +347,31 @@ impl Analyzer {
                 self.typecheck_expr(&mut assign.value, env)?;
 
                 if let Some(ty) = env.get(&assign.name) {
-                    let _ = ty.unify(&assign.value.ty)?;
+                    let _ = ty.unify(&assign.value.ty).map_err(|err| {
+                        err
+                            .create_error()
+                            .add_line(69)
+                            .add_column(69)
+                            .add_file_name(&self.module_name)
+                            .add_package_name(&self.package_name)
+                            .clone()
+
+                    });
                     // Ah, Uh..No variable decl must return unit
                     //return Ok(ty.clone());
                     return Ok(DataType::Unit);
                 } else {
                     // TODO: Pass the line, col here
-                    return Err(format!(
-                        "Variable not declared: {} at {}:{}",
-                        assign.name, 69, 69
-                    ));
+                    return Err(
+                        format!(
+                        "Variable not declared")
+                            .create_error()
+                            .add_line(69)
+                            .add_column(69)
+                            .add_file_name(&self.module_name)
+                            .add_package_name(&self.package_name)
+                            .clone()
+                    );
                 }
             }
 
@@ -307,10 +379,16 @@ impl Analyzer {
                 // ensure none of types are unknown
                 for (_, typ) in aliendef.fn_arguments.iter() {
                     if typ == &DataType::Unknown {
-                        return Err(format!(
-                            "alien function param cannot be Unknown: {} is Unknown",
-                            typ.to_str()
-                        ));
+                        return Err(
+                            format!(
+                            "alien function param cannot be Unknown: {} is Unknown",typ.to_str())
+                            .create_error()
+                            .add_line(69)
+                            .add_column(69)
+                            .add_file_name(&self.module_name)
+                            .add_package_name(&self.package_name)
+                            .clone()
+                        );
                     }
                 }
                 return Ok(DataType::Unit);
@@ -328,7 +406,7 @@ impl Analyzer {
         }
     }
 
-    fn typecheck_expr(&mut self, expr: &mut ast::TypedExpr, env: &TypeEnv) -> Result<(), String> {
+    fn typecheck_expr(&mut self, expr: &mut ast::TypedExpr, env: &TypeEnv) -> Result<(), ErrorMsg> {
         match &mut expr.expr {
             Expr::Literal(lit) => {
                 match lit {
@@ -348,10 +426,15 @@ impl Analyzer {
                 //} else if let Some(ty) = self.imports.get(name.as_str()) {
                 //    expr.ty = ty.clone();
                 } else {
-                    return Err(format!(
-                        "Undefined variable: {} at {}:{}",
-                        name, tok.line, tok.column
-                    ));
+                    return Err(
+                        format!("Undefined variable `{}`", tok.lexeme)
+                            .create_error()
+                            .add_line(tok.line)
+                            .add_column(tok.column)
+                            .add_file_name(&self.module_name)
+                            .add_package_name(&self.package_name)
+                            .clone()
+                    );
                 }
             }
 
@@ -362,19 +445,27 @@ impl Analyzer {
                     UnaryOp::Minus => {
                         // Modify for other types
                         if inner.ty != DataType::I32 {
-                            return Err(format!(
-                                "Cannot negate non-integer type: {}",
-                                inner.ty.to_str()
-                            ));
+                            return Err(format!("Cannot negate non-integer type: {}",inner.ty.to_str())
+                                .create_error()
+                                .add_line(69)
+                                .add_column(69)
+                                .add_file_name(&self.module_name)
+                                .add_package_name(&self.package_name)
+                                .clone()
+                            );
                         }
                         expr.ty = DataType::I32;
                     }
                     UnaryOp::Bang => {
                         if inner.ty != DataType::Boolean {
-                            return Err(format!(
-                                "Cannot negate non-boolean type: {}",
-                                inner.ty.to_str()
-                            ));
+                            return Err(format!("Cannot negate non-boolean type: {}", inner.ty.to_str())
+                                .create_error()
+                                .add_line(69)
+                                .add_column(69)
+                                .add_file_name(&self.module_name)
+                                .add_package_name(&self.package_name)
+                                .clone()
+                            );
                         }
                         expr.ty = DataType::Boolean
                     }
@@ -399,11 +490,14 @@ impl Analyzer {
                                 || right.ty != DataType::F32
                                 || right.ty != DataType::F64)
                         {
-                            return Err(format!(
-                                "Binary Operation requires int | float operands, got {} and {}",
-                                left.ty.to_str(),
-                                right.ty.to_str()
-                            ));
+                            return Err(format!( "Binary Operation requires int | float operands, got {} and {}", left.ty.to_str(), right.ty.to_str())
+                                .create_error()
+                                .add_line(69)
+                                .add_column(69)
+                                .add_file_name(&self.module_name)
+                                .add_package_name(&self.package_name)
+                                .clone()
+                            );
                         }
                         expr.ty = left.ty.clone()
                     }
@@ -416,28 +510,44 @@ impl Analyzer {
                             || (left.ty == DataType::F32 && right.ty == DataType::F32)
                             || (left.ty == DataType::F64 && right.ty == DataType::F64))
                         {
-                            return Err(format!(
-                                "Invalid comparison operands. got {} and {}",
-                                left.ty.to_str(),
-                                right.ty.to_str()
-                            ));
+                            return Err(format!( "Invalid comparison operands. got {} and {}", left.ty.to_str(), right.ty.to_str())
+                                .create_error()
+                                .add_line(69)
+                                .add_column(69)
+                                .add_file_name(&&self.module_name)
+                                .add_package_name(&&self.package_name)
+                                .clone()
+                            );
                         }
                         expr.ty = DataType::Boolean;
                     }
 
                     BinaryOp::And | BinaryOp::Or => {
                         if left.ty != DataType::Boolean || right.ty != DataType::Boolean {
-                            return Err(format!(
-                                "Logical operators can only operate on `bool` type. got {} and {}",
-                                left.ty.to_str(),
-                                right.ty.to_str()
-                            ));
+                            return Err(format!( "Logical operators can only operate on `bool` type. got {} and {}", left.ty.to_str(), right.ty.to_str())
+                                .create_error()
+                                .add_line(69)
+                                .add_column(69)
+                                .add_file_name(&self.module_name)
+                                .add_package_name(&self.package_name)
+                                .clone()
+
+                            );
                         }
                         expr.ty = DataType::Boolean
                     }
 
                     BinaryOp::EqualEqual | BinaryOp::NotEqual => {
-                        let _ = left.ty.unify(&right.ty)?;
+                        let _ = left.ty.unify(&right.ty).map_err(|err| {
+                            err
+                            .create_error()
+                            .add_line(69)
+                            .add_column(69)
+                            .add_file_name(&self.module_name)
+                            .add_package_name(&self.package_name)
+                            .clone()
+
+                        });
                         expr.ty = DataType::Boolean;
                     }
                 }
@@ -454,29 +564,58 @@ impl Analyzer {
                     //} else if self.imports.get(name).is_some() {
                     //    self.imports.get(name).unwrap().clone()
                     } else {
-                        return Err(format!("Undefined function: {}", name));
+                        return Err(format!("Undefined function: {}", name)
+                                .create_error()
+                                .add_line(69)
+                                .add_column(69)
+                                .add_file_name(&self.module_name)
+                                .add_package_name(&self.package_name)
+                                .clone()
+                        );
                     }
                 };
 
                 if let DataType::Function { params, ret_type } = func_type {
                     if args.len() != params.len() {
                         return Err(format!(
-                            "Function {} expectes {} arguments, got {} arguments",
-                            name,
-                            params.len(),
-                            args.len()
-                        ));
+                            "Function {} expectes {} arguments, got {} arguments", name, params.len(), args.len())
+                                .create_error()
+                                .add_line(69)
+                                .add_column(69)
+                                .add_file_name(&self.module_name)
+                                .add_package_name(&self.package_name)
+                                .clone()
+
+                        );
                     }
 
                     for (arg, param) in args.iter_mut().zip(params) {
                         self.typecheck_expr(arg, env)?;
-                        let _ = param.1.unify(&arg.ty)?;
+                        let _ = param.1.unify(&arg.ty)
+                            .map_err(|err| {
+                                err
+                                    .create_error()
+                                    .add_line(69)
+                                    .add_column(69)
+                                    .add_file_name(&self.module_name)
+                                    .add_package_name(&self.package_name)
+                                    .clone()
+
+                            });
                     }
 
                     // Set the type
                     expr.ty = *ret_type;
                 } else {
-                    return Err(format!("{} is not a function", name));
+                    return Err(
+                        format!("{} is not a function", name)
+                                .create_error()
+                                .add_line(69)
+                                .add_column(69)
+                                .add_file_name(&self.module_name)
+                                .add_package_name(&self.package_name)
+                                .clone()
+                    );
                 }
             }
 
@@ -492,15 +631,29 @@ impl Analyzer {
                 let module_name = call_namespace.first().unwrap().clone();
                 let name = call_namespace.iter().nth(1).unwrap().clone();
                 if self.imports.get(&module_name).is_none() {
-                    return Err(format!("Could not find {} in this scope.", module_name));
+                    return Err(
+                        format!("Could not find {} in this scope.", module_name)
+                                .create_error()
+                                .add_line(69)
+                                .add_column(69)
+                                .add_file_name(&self.module_name)
+                                .add_package_name(&self.package_name)
+                                .clone()
+                        );
                 }
 
                 let module_namespace = self.imports.get(&module_name).unwrap();
                 let func_type = if module_namespace.get_import(&name).is_none() {
                     return Err(format!(
                         "Could not find {} in {}'s scope.",
-                        name, module_name
-                    ));
+                        name, module_name)
+                                .create_error()
+                                .add_line(69)
+                                .add_column(69)
+                                .add_file_name(&self.module_name)
+                                .add_package_name(&self.package_name)
+                                .clone()
+                    );
                 } else {
                     module_namespace.get_import(&name).unwrap().clone()
                 };
@@ -511,19 +664,40 @@ impl Analyzer {
                             "Function {} expectes {} arguments, got {} arguments",
                             name,
                             params.len(),
-                            args.len()
-                        ));
+                            args.len())
+                                .create_error()
+                                .add_line(69)
+                                .add_column(69)
+                                .add_file_name(&self.module_name)
+                                .add_package_name(&self.package_name)
+                                .clone()
+                        );
                     }
 
                     for (arg, param) in args.iter_mut().zip(params) {
                         self.typecheck_expr(arg, env)?;
-                        let _ = param.1.unify(&arg.ty)?;
+                        let _ = param.1.unify(&arg.ty).map_err(|err| {
+                            err
+                                .create_error()
+                                .add_line(69)
+                                .add_column(69)
+                                .add_file_name(&self.module_name)
+                                .add_package_name(&self.package_name)
+                                .clone();
+                        });
                     }
 
                     // Set the type
                     expr.ty = *ret_type;
                 } else {
-                    return Err(format!("{} is not a function", name));
+                    return Err(format!("{} is not a function", name)
+                                .create_error()
+                                .add_line(69)
+                                .add_column(69)
+                                .add_file_name(&self.module_name)
+                                .add_package_name(&self.package_name)
+                                .clone()
+                    );
                 }
             }
 
@@ -543,8 +717,14 @@ impl Analyzer {
                     // Worst error message
                     // Improve this
                     return Err(format!(
-                        "Only Expressions resolving to a boolean is allowed in if condition"
-                    ));
+                        "Only Expressions resolving to a boolean is allowed in if condition")
+                                .create_error()
+                                .add_line(69)
+                                .add_column(69)
+                                .add_file_name(&self.module_name)
+                                .add_package_name(&self.package_name)
+                                .clone()
+                    );
                 }
 
                 let mut if_block_env = env.clone();
@@ -569,8 +749,14 @@ impl Analyzer {
                     return Err(format!(
                         "If and else block return mismatched types.\nIf block -> {}\nElse block -> {}",
                         if_expr_ty.to_str(),
-                        else_expr_ty.to_str()
-                    ));
+                        else_expr_ty.to_str())
+                                .create_error()
+                                .add_line(69)
+                                .add_column(69)
+                                .add_file_name(&self.module_name)
+                                .add_package_name(&self.package_name)
+                                .clone()
+                    );
                 }
 
                 expr.ty = if_expr_ty.clone();
@@ -585,8 +771,14 @@ impl Analyzer {
                 // Verify that it resolves to boolean
                 if condition.ty != DataType::Boolean {
                     return Err(format!(
-                        "Only Expressions resolving to a boolean is allowed in while condition"
-                    ));
+                        "Only Expressions resolving to a boolean is allowed in while condition")
+                                .create_error()
+                                .add_line(69)
+                                .add_column(69)
+                                .add_file_name(&self.module_name)
+                                .add_package_name(&self.package_name)
+                                .clone()
+                    );
                 }
 
                 let mut local_env = env.clone();
