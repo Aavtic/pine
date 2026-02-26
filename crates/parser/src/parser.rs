@@ -101,7 +101,7 @@ impl Parser {
         }
 
         //add to compilation_unit
-        let module = ast::Module::new(module_name.into(), statements.clone());
+        let module = ast::Module::new(module_name.into(), statements.clone(), namespace.clone());
         if is_main {
             self.compilation_unit.add_global(module);
         } else {
@@ -806,6 +806,10 @@ impl Parser {
             TokenType::ClosePara,
             "Expected closing bracket `)` after arguments",
         )?;
+
+        if self.check(TokenType::SemiColon) {
+            self.advance();
+        }
 
         return Ok(ast::Expr::FunctionCall {
             name,

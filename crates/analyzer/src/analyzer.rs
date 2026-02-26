@@ -13,6 +13,9 @@ pub struct Analyzer {
     pub loop_nest_level: i32,
     pub imports: Imports,
     pub exports: TypeEnv,
+
+    module_name: String,
+    package_name: String,
 }
 
 impl Analyzer {
@@ -21,6 +24,9 @@ impl Analyzer {
             loop_nest_level: 0,
             imports: Imports::new(),
             exports: TypeEnv::new(),
+
+            module_name: "Unkonwn".into(),
+            package_name: "Unknown".into(),
         };
     }
 

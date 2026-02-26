@@ -135,6 +135,9 @@ pub struct Module {
     pub imports: Imports,
     pub exports: TypeEnv,
     //pub lookup_table: 
+
+    // namespace in which this module is located
+    pub namespace: NamespaceType,
 }
 
 #[derive(Clone, Debug)]
@@ -231,12 +234,14 @@ impl CompilationUnit {
 }
 
 impl Module {
-    pub fn new(name: String,  ast: Vec<Statement>) -> Self {
+    pub fn new(name: String,  ast: Vec<Statement>, namespace: NamespaceType) -> Self {
         Self {
             name,
             imports: HashMap::new(),
             exports: TypeEnv::new(),
             ast,
+
+            namespace,
         }
     }
 
