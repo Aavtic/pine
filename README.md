@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/assets/pine-logo.png" alt="Pine Logo" width="200"/>
+</p>
+
 # 🌲 The Pine Programming Language
 
 Pine is a statically typed, compiled programming language focused on high performance, minimal design, and a modern developer experience.
