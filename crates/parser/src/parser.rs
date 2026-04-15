@@ -457,7 +457,7 @@ impl Parser {
             let import_name = self
                 .consume(
                     TokenType::Identifier,
-                    "import value expected after `import` statement",
+                    "import value expected after `use` statement",
                 )?
                 .lexeme;
 
