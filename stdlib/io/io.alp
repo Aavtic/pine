@@ -1,5 +1,7 @@
 alien "c" fn pine_println(s: str) -> i32
+alien "c" fn pine_read_line_stdin(s: str) -> str
 alien "c" fn pine_println_int(s: i32) -> i32
+alien "c" fn pine_println_ld(s: i64) -> i32
 alien "c" fn pine_println_float(s: f32) -> i32
 alien "c" fn pine_print(s: str) -> i32
 
@@ -15,6 +17,14 @@ fn printd(d: i32) -> i32 {
     pine_println_int(d)
 }
 
+fn printld(ld: i64) -> i32 {
+    pine_println_ld(ld)
+}
+
 fn printf(f: f32) -> i32 {
     pine_println_float(f)
+}
+
+fn input(s: str) -> str{
+    pine_read_line_stdin(s)
 }
