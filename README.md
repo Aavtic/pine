@@ -33,7 +33,7 @@ Pine has evolved beyond arithmetic and functions into a small but expressive sys
 ### Primitive Types
 
 * `i32`
-* `i62`
+* `i64`
 * `f32`
 * `f64`
 * `bool`
